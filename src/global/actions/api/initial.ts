@@ -33,6 +33,7 @@ import {
   loadStoredSession,
   storeSession,
 } from '../../../util/sessions';
+import { getFamilyGramWebTransportFromWindow } from '../../../util/familygramServer';
 import { forceWebsync } from '../../../util/websync';
 import {
   callApi, callApiLocal, initApi, setShouldEnableDebugLog,
@@ -75,6 +76,8 @@ addActionHandler('initApi', (global, actions): ActionReturnType => {
     .map(({ userId }) => userId)
     .filter(Boolean);
 
+  const familyGramWebTransport = IS_FAMILYGRAM ? getFamilyGramWebTransportFromWindow() : undefined;
+
   void initApi(actions.apiUpdate, {
     userAgent: navigator.userAgent,
     platform: PLATFORM_ENV,
@@ -91,6 +94,8 @@ addActionHandler('initApi', (global, actions): ActionReturnType => {
     isTestServerRequested: hasTestParam,
     accountIds,
     hasPasskeySupport: IS_WEBAUTHN_SUPPORTED,
+    webTransportHost: familyGramWebTransport?.host,
+    webTransportPort: familyGramWebTransport?.port,
   });
 
   void setShouldEnableDebugLog(Boolean(shouldCollectDebugLogs));

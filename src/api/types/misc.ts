@@ -32,6 +32,8 @@ export interface ApiInitialArgs {
   isTestServerRequested?: boolean;
   accountIds?: string[];
   hasPasskeySupport?: boolean;
+  webTransportHost?: string;
+  webTransportPort?: number;
 }
 
 export type ApiPasskeyOption = {

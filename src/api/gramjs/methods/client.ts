@@ -21,6 +21,7 @@ import {
   APP_CODE_NAME,
   DEBUG, DEBUG_GRAMJS, IS_FAMILYGRAM, IS_TEST, LANG_PACK, UPLOAD_WORKERS,
 } from '../../../config';
+import { setFamilyGramWebTransport } from '../../../util/familygramServer';
 import { pause } from '../../../util/schedulers';
 import { buildWebPage } from '../apiBuilders/messageContent';
 import {
@@ -94,8 +95,12 @@ export async function init(initialArgs: ApiInitialArgs, onConnected?: NoneToVoid
     userAgent, platform, sessionData, isWebmSupported, maxBufferSize, webAuthToken, dcId,
     mockScenario, shouldForceHttpTransport, shouldAllowHttpTransport,
     shouldDebugExportedSenders, langCode, isTestServerRequested, accountIds,
-    hasPasskeySupport,
+    hasPasskeySupport, webTransportHost, webTransportPort,
   } = initialArgs;
+
+  if (IS_FAMILYGRAM && webTransportHost && webTransportPort) {
+    setFamilyGramWebTransport(webTransportHost, webTransportPort);
+  }
 
   const session = new sessions.CallbackSession(sessionData, onSessionUpdate);
 
