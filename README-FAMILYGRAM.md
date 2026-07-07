@@ -45,9 +45,19 @@ npm run build:production
 
 Deploy `dist/` behind nginx — see `deploy/nginx-familygram.conf.example`.
 
+## Login
+
+FamilyGram Web defaults to **phone number + verification code** (not QR).
+
+QR login on a private Testgram server requires another **FamilyGram desktop/mobile** client
+already logged in to scan the code — the official Telegram app cannot scan it.
+
+With `App__FixedVerifyCode` on the server, enter that code after your phone number.
+
 ## Requirements
 
 - Testgram gateway with ports `30443`/`30444` enabled (default in docker-compose)
+- `messenger-query-server` running (needed for auth RPC responses)
 - Same `api_id` / `api_hash` as your other FamilyGram clients
 - HTTPS in production (NPM or nginx + Let's Encrypt)
 - WebRTC: Coturn configured on the Testgram server (for voice/video calls)

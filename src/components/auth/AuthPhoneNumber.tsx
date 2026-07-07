@@ -6,6 +6,7 @@ import { getActions, withGlobal } from '../../global';
 import type { ApiCountryCode } from '../../api/types';
 import type { GlobalState } from '../../global/types';
 
+import { IS_FAMILYGRAM } from '../../config';
 import { requestMeasure } from '../../lib/fasterdom/fasterdom';
 import { IS_SAFARI, IS_TOUCH_ENV } from '../../util/browser/windowEnvironment';
 import { preloadImage } from '../../util/files';
@@ -293,7 +294,7 @@ const AuthPhoneNumber = ({
               <Loading />
             )
           )}
-          {isAuthReady && (
+          {isAuthReady && !IS_FAMILYGRAM && (
             <Button
               className="auth-button"
               isText

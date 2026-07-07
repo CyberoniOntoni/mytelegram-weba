@@ -145,7 +145,9 @@ export async function init(initialArgs: ApiInitialArgs, onConnected?: NoneToVoid
         onPasskeyOption,
         qrCode: onRequestQrCode,
         onError: onAuthError,
-        initialMethod: platform === 'iOS' || platform === 'Android' ? 'phoneNumber' : 'qrCode',
+        initialMethod: IS_FAMILYGRAM || platform === 'iOS' || platform === 'Android'
+          ? 'phoneNumber'
+          : 'qrCode',
         shouldThrowIfUnauthorized: Object.values(sessionData?.keys || {}).length > 0,
         webAuthToken,
         webAuthTokenFailed: onWebAuthTokenFailed,

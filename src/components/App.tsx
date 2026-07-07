@@ -5,7 +5,9 @@ import type { GlobalState } from '../global/types';
 import type { ThemeKey } from '../types';
 import type { UiLoaderPage } from './common/UiLoader';
 
-import { DARK_THEME_BG_COLOR, INACTIVE_MARKER, LIGHT_THEME_BG_COLOR, PAGE_TITLE, PAGE_TITLE_TAURI } from '../config';
+import {
+  DARK_THEME_BG_COLOR, INACTIVE_MARKER, IS_FAMILYGRAM, LIGHT_THEME_BG_COLOR, PAGE_TITLE, PAGE_TITLE_TAURI,
+} from '../config';
 import { forceMutation } from '../lib/fasterdom/stricterdom.ts';
 import { selectActionMessageBg, selectTabState, selectTheme } from '../global/selectors';
 import { IS_TAURI } from '../util/browser/globalEnvironment';
@@ -175,7 +177,7 @@ const App = ({
   } else if (hasPasscode) {
     activeKey = AppScreens.lock;
   } else {
-    page = isMobileOs ? 'authPhoneNumber' : 'authQrCode';
+    page = (IS_FAMILYGRAM || isMobileOs) ? 'authPhoneNumber' : 'authQrCode';
     activeKey = AppScreens.auth;
   }
 

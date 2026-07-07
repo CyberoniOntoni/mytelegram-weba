@@ -5,6 +5,7 @@ import { getActions, withGlobal } from '../../global';
 
 import type { GlobalState } from '../../global/types';
 
+import { IS_FAMILYGRAM } from '../../config';
 import { IS_TAURI } from '../../util/browser/globalEnvironment';
 import { IS_MAC_OS, PLATFORM_ENV } from '../../util/browser/windowEnvironment';
 
@@ -33,8 +34,10 @@ const Auth = ({
 
   const isMobile = PLATFORM_ENV === 'iOS' || PLATFORM_ENV === 'Android';
 
+  const preferPhoneLogin = IS_FAMILYGRAM || isMobile;
+
   const handleChangeAuthorizationMethod = () => {
-    if (!isMobile) {
+    if (!preferPhoneLogin) {
       goToAuthQrCode();
     } else {
       returnToAuthPhoneNumber();
@@ -42,8 +45,8 @@ const Auth = ({
   };
 
   useHistoryBack({
-    isActive: (!isMobile && authState === 'authorizationStateWaitPhoneNumber')
-      || (isMobile && authState === 'authorizationStateWaitQrCode'),
+    isActive: (!preferPhoneLogin && authState === 'authorizationStateWaitPhoneNumber')
+      || (preferPhoneLogin && authState === 'authorizationStateWaitQrCode'),
     onBack: handleChangeAuthorizationMethod,
   });
 
@@ -66,7 +69,7 @@ const Auth = ({
       case 'authorizationStateWaitQrCode':
         return <AuthQrCode />;
       default:
-        return isMobile ? <AuthPhoneNumber /> : <AuthQrCode />;
+        return preferPhoneLogin ? <AuthPhoneNumber /> : <AuthQrCode />;
     }
   }
 
@@ -83,7 +86,7 @@ const Auth = ({
       case 'authorizationStateWaitQrCode':
         return 4;
       default:
-        return isMobile ? 3 : 4;
+        return preferPhoneLogin ? 3 : 4;
     }
   }
 
