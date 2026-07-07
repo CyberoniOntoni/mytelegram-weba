@@ -16,7 +16,7 @@ Testgram runs in Docker Compose; `gateway-server` publishes web transport to the
 The browser never talks to Docker directly. Chain:
 
 ```text
-wss://web.example.com/apiws  →  NPM :443  →  nginx :8080  →  127.0.0.1:30444 (Docker port publish)
+wss://web.example.com/apiws  →  NPM :443  →  nginx :8082  →  127.0.0.1:30444 (Docker port publish)
 ```
 
 On the LXC, verify before going live:

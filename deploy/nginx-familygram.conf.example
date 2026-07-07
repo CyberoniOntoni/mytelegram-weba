@@ -7,10 +7,11 @@
 # Traffic chain (production):
 #   Browser wss://web.example.com/apiws
 #     → NPM :443 (SSL termination, websockets ON)
-#     → this nginx :8080
+#     → this nginx :8082  (8080 is often taken by Docker on Testgram hosts)
 #     → 127.0.0.1:30444 (Docker-published gateway HTTP/WS port)
 #
 # Replace example.com with your domain.
+# If 8082 is also in use: ss -tlnp | grep -E '808[0-9]' and pick a free port.
 
 map $http_upgrade $connection_upgrade {
     default upgrade;
@@ -18,7 +19,7 @@ map $http_upgrade $connection_upgrade {
 }
 
 server {
-    listen 8080;
+    listen 8082;
     server_name _;
 
     root /opt/familygram-web/dist;

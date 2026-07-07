@@ -40,4 +40,4 @@ fi
 
 echo ""
 echo "OK — nginx can proxy /apiws and /apiw1 to http://${GATEWAY_HOST}:${GATEWAY_PORT}"
-echo "    Client connects via wss://your-domain/apiws (NPM → nginx:8080 → gateway:30444)"
+echo "    Client connects via wss://your-domain/apiws (NPM → nginx:8082 → gateway:30444)"
