@@ -100,6 +100,8 @@ export async function init(initialArgs: ApiInitialArgs, onConnected?: NoneToVoid
 
   if (IS_FAMILYGRAM && webTransportHost && webTransportPort) {
     setFamilyGramWebTransport(webTransportHost, webTransportPort);
+    // eslint-disable-next-line no-console
+    console.info(`[FamilyGram] Connecting to wss://${webTransportHost}/apiws`);
   }
 
   const session = new sessions.CallbackSession(sessionData, onSessionUpdate);
@@ -120,7 +122,9 @@ export async function init(initialArgs: ApiInitialArgs, onConnected?: NoneToVoid
       additionalDcsDisabled: IS_TEST,
       shouldDebugExportedSenders,
       shouldForceHttpTransport,
-      shouldAllowHttpTransport,
+      shouldAllowHttpTransport: IS_FAMILYGRAM ? false : shouldAllowHttpTransport,
+      connectionRetries: IS_FAMILYGRAM ? 10 : undefined,
+      connectionRetriesToFallback: IS_FAMILYGRAM ? 0 : undefined,
       dcId,
       langPack: LANG_PACK,
       langCode,
@@ -142,7 +146,7 @@ export async function init(initialArgs: ApiInitialArgs, onConnected?: NoneToVoid
 
     try {
       client.setPingCallback(getDifference);
-      await client.start({
+      const startPromise = client.start({
         phoneNumber: onRequestPhoneNumber,
         phoneCode: onRequestCode,
         password: onRequestPassword,
@@ -155,7 +159,7 @@ export async function init(initialArgs: ApiInitialArgs, onConnected?: NoneToVoid
           : 'qrCode',
         dcId: IS_FAMILYGRAM ? 1 : dcId,
         shouldForceHttpTransport,
-        shouldAllowHttpTransport: IS_FAMILYGRAM ? true : shouldAllowHttpTransport,
+        shouldAllowHttpTransport: IS_FAMILYGRAM ? false : shouldAllowHttpTransport,
         shouldThrowIfUnauthorized: Object.values(sessionData?.keys || {}).length > 0,
         webAuthToken,
         webAuthTokenFailed: onWebAuthTokenFailed,
@@ -163,6 +167,17 @@ export async function init(initialArgs: ApiInitialArgs, onConnected?: NoneToVoid
         accountIds,
         hasPasskeySupport,
       }, onConnected);
+
+      if (IS_FAMILYGRAM) {
+        await Promise.race([
+          startPromise,
+          pause(45000).then(() => {
+            throw new Error('FamilyGram connection timeout');
+          }),
+        ]);
+      } else {
+        await startPromise;
+      }
     } catch (err: any) {
       // eslint-disable-next-line no-console
       console.error(err);

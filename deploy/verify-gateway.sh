@@ -38,6 +38,31 @@ else
   exit 1
 fi
 
+if command -v docker >/dev/null 2>&1 && [ -d "$COMPOSE_DIR" ]; then
+  echo "-- required Testgram services:"
+  for svc in gateway-server auth-server messenger-query-server rabbitmq mongodb redis; do
+    status="$(cd "$COMPOSE_DIR" && docker compose ps "$svc" --format '{{.Status}}' 2>/dev/null || true)"
+    if [ -n "$status" ]; then
+      echo "    ${svc}: ${status}"
+    else
+      echo "    WARN: ${svc} not found in compose"
+    fi
+  done
+fi
+
+if command -v node >/dev/null 2>&1; then
+  echo "-- WebSocket probe (/apiws, subprotocol binary):"
+  node -e "
+    const { WebSocket } = require('ws');
+    const url = 'ws://${GATEWAY_HOST}:${GATEWAY_PORT}/apiws';
+    const ws = new WebSocket(url, 'binary');
+    const t = setTimeout(() => { ws.terminate(); console.log('FAIL: WebSocket timeout'); process.exit(1); }, 8000);
+    ws.on('open', () => { clearTimeout(t); console.log('OK: WebSocket opened on', url); ws.close(); process.exit(0); });
+    ws.on('error', (e) => { clearTimeout(t); console.log('FAIL:', e.message); process.exit(1); });
+  " 2>/dev/null || echo "    (install node package ws on the host to run WS probe, or use: npx wscat -c ws://127.0.0.1:${GATEWAY_PORT}/apiws -s binary)"
+fi
+
 echo ""
 echo "OK — nginx can proxy /apiws and /apiw1 to http://${GATEWAY_HOST}:${GATEWAY_PORT}"
 echo "    Client connects via wss://your-domain/apiws (NPM → nginx:8082 → gateway:30444)"
+echo "    If WebSocket opens but login still hangs, check auth-server and messenger-query-server logs."

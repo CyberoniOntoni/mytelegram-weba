@@ -11,6 +11,11 @@ import {
   FAMILYGRAM_DEFAULT_COUNTRY_ISO,
   FAMILYGRAM_FALLBACK_PHONE_CODES,
 } from '../../util/familygramCountries';
+import {
+  getFamilyGramWebSocketUrl,
+  probeFamilyGramWebSocket,
+  type FamilyGramWsProbeResult,
+} from '../../util/familygramConnectionProbe';
 import { requestMeasure } from '../../lib/fasterdom/fasterdom';
 import { IS_SAFARI, IS_TOUCH_ENV } from '../../util/browser/windowEnvironment';
 import { preloadImage } from '../../util/files';
@@ -63,6 +68,8 @@ const AuthPhoneNumber = ({
     goToAuthQrCode,
     setSharedSettingOption,
     loginWithPasskey,
+    destroyConnection,
+    initApi,
   } = getActions();
 
   const {
@@ -90,6 +97,7 @@ const AuthPhoneNumber = ({
   const [isTouched, setIsTouched] = useState(false);
   const [lastSelection, setLastSelection] = useState<[number, number] | undefined>();
   const [isLoading, markIsLoading, unmarkIsLoading] = useFlag();
+  const [wsProbe, setWsProbe] = useState<FamilyGramWsProbeResult | 'pending'>('pending');
 
   const accountsInfo = useMultiaccountInfo();
   const hasActiveAccount = Object.values(accountsInfo).length > 0;
@@ -128,6 +136,20 @@ const AuthPhoneNumber = ({
       loadNearestCountry();
     }
   }, [IS_FAMILYGRAM, nearestCountry]);
+
+  useEffect(() => {
+    if (!IS_FAMILYGRAM || isConnected) return undefined;
+
+    let cancelled = false;
+    setWsProbe('pending');
+    void probeFamilyGramWebSocket().then((result) => {
+      if (!cancelled) setWsProbe(result);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [IS_FAMILYGRAM, isConnected]);
 
   useEffect(() => {
     if (IS_FAMILYGRAM && !country && !isTouched && effectivePhoneCodeList.length) {
@@ -280,9 +302,25 @@ const AuthPhoneNumber = ({
         {IS_FAMILYGRAM && !isConnected && (
           <p className="note">
             {connectionState === 'connectionStateBroken'
-              ? 'Cannot connect to the server. Check that NPM has Websockets enabled and wss://web.50bar.app/apiws works.'
-              : 'Connecting to server…'}
+              ? 'Cannot connect to the server. Clear site data, then reload. Ensure Testgram gateway, auth-server, and messenger-query-server are running.'
+              : wsProbe === 'failed'
+                ? `WebSocket to ${getFamilyGramWebSocketUrl() || 'server'} failed. Enable Websockets in NPM and proxy /apiws to gateway port 30444.`
+                : wsProbe === 'ok'
+                  ? 'WebSocket OK — completing MTProto handshake…'
+                  : 'Connecting to server…'}
           </p>
+        )}
+        {IS_FAMILYGRAM && !isConnected && wsProbe === 'ok' && (
+          <Button
+            className="auth-button"
+            isText
+            onClick={() => {
+              destroyConnection();
+              initApi();
+            }}
+          >
+            Retry connection
+          </Button>
         )}
         <form className="form" action="" onSubmit={handleSubmit}>
           <CountryCodeInput

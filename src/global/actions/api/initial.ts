@@ -78,10 +78,18 @@ addActionHandler('initApi', (global, actions): ActionReturnType => {
 
   const familyGramWebTransport = IS_FAMILYGRAM ? getFamilyGramWebTransportFromWindow() : undefined;
 
+  const isAuthorized = global.auth?.state === 'authorizationStateReady';
+  let sessionData = loadStoredSession();
+  // Stale MTProto auth keys (e.g. from earlier broken localhost connects) block handshake.
+  if (IS_FAMILYGRAM && !isAuthorized) {
+    clearStoredSession();
+    sessionData = undefined;
+  }
+
   void initApi(actions.apiUpdate, {
     userAgent: navigator.userAgent,
     platform: PLATFORM_ENV,
-    sessionData: loadStoredSession(),
+    sessionData,
     isWebmSupported: IS_WEBM_SUPPORTED,
     maxBufferSize: MAX_BUFFER_SIZE,
     webAuthToken: initialLocationHash?.tgWebAuthToken,
