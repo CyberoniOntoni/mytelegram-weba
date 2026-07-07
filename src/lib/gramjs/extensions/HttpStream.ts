@@ -55,11 +55,14 @@ export default class HttpStream {
   }
 
   static getURL(ip: string, port: number, isTestServer?: boolean, isPremium?: boolean) {
-    if (port === 443) {
-      return `https://${ip}:${port}/apiw1${isTestServer ? '_test' : ''}${isPremium ? '_premium' : ''}`;
-    } else {
-      return `http://${ip}:${port}/apiw1${isTestServer ? '_test' : ''}${isPremium ? '_premium' : ''}`;
+    const suffix = `/apiw1${isTestServer ? '_test' : ''}${isPremium ? '_premium' : ''}`;
+    const authority = (port === 443 || port === 80) ? ip : `${ip}:${port}`;
+
+    if (port === 443 || port === 30443) {
+      return `https://${authority}${suffix}`;
     }
+
+    return `http://${authority}${suffix}`;
   }
 
   async connect(port: number, ip: string, isTestServer = false, isPremium = false) {

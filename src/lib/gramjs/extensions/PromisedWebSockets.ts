@@ -77,11 +77,14 @@ export default class PromisedWebSockets {
   }
 
   getWebSocketLink(ip: string, port: number, isTestServer?: boolean, isPremium?: boolean) {
-    if (port === 30443) {
-      return `wss://${ip}:${port}/apiws${isTestServer ? '_test' : ''}${isPremium ? '_premium' : ''}`;
-    } else {
-      return `ws://${ip}:${port}/apiws${isTestServer ? '_test' : ''}${isPremium ? '_premium' : ''}`;
+    const suffix = `/apiws${isTestServer ? '_test' : ''}${isPremium ? '_premium' : ''}`;
+    const authority = (port === 443 || port === 80) ? ip : `${ip}:${port}`;
+
+    if (port === 30443 || port === 443) {
+      return `wss://${authority}${suffix}`;
     }
+
+    return `ws://${authority}${suffix}`;
   }
 
   connect(port: number, ip: string, isTestServer = false, isPremium = false) {

@@ -6,11 +6,16 @@ import type {
   ResaleGiftsFilterOptions,
 } from './types';
 
-export const APP_CODE_NAME = 'A';
-export const APP_NAME = process.env.APP_NAME || `Telegram Web ${APP_CODE_NAME}`;
+export const APP_CODE_NAME = process.env.FAMILYGRAM_SELF_HOSTED === '1' ? 'FamilyGram' : 'A';
+export const APP_NAME = process.env.APP_NAME || (
+  process.env.FAMILYGRAM_SELF_HOSTED === '1' ? 'FamilyGram Web' : `Telegram Web ${APP_CODE_NAME}`
+);
 
-export const PRODUCTION_HOSTNAME = 'web.telegram.org';
-export const PRODUCTION_URL = 'https://web.telegram.org/a';
+export const IS_FAMILYGRAM = process.env.FAMILYGRAM_SELF_HOSTED === '1';
+export const PRODUCTION_HOSTNAME = process.env.PRODUCTION_HOSTNAME || 'web.telegram.org';
+export const PRODUCTION_URL = process.env.BASE_URL || (
+  IS_FAMILYGRAM ? '/' : 'https://web.telegram.org/a'
+);
 export const WEB_VERSION_BASE = 'https://web.telegram.org/'; // Used to redirect to other versions
 export const BASE_URL = process.env.BASE_URL;
 export const ACCOUNT_QUERY = 'account';

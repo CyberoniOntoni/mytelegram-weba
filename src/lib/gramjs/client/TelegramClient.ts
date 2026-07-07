@@ -357,9 +357,10 @@ class TelegramClient {
 
     if (!this.session.serverAddress || (this.session.serverAddress.includes(':') !== this._useIPV6)) {
       const DC = getDC(this.defaultDcId);
+      const port = DC.port || (this._args.useWSS ? 30443 : 30444);
       // TODO Fill IP addresses for when `this._useIPV6` is used
       this.session.setDC(
-        this.defaultDcId, DC.ipAddress, this._args.useWSS ? 30443 : 30444, this._args.isTestServerRequested,
+        this.defaultDcId, DC.ipAddress, port, this._args.isTestServerRequested,
       );
     }
   }

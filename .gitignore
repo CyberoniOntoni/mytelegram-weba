@@ -2,6 +2,9 @@ dist/build-stats.json
 node_modules
 .cache
 .env
+.env.local
+deploy/DEPLOYMENT.local.md
+deploy/nginx.local.conf
 src/lib/gramjs/build/
 build-contest/
 tests/

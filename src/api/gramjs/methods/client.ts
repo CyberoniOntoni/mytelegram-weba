@@ -19,7 +19,7 @@ import type {
 
 import {
   APP_CODE_NAME,
-  DEBUG, DEBUG_GRAMJS, IS_TEST, LANG_PACK, UPLOAD_WORKERS,
+  DEBUG, DEBUG_GRAMJS, IS_FAMILYGRAM, IS_TEST, LANG_PACK, UPLOAD_WORKERS,
 } from '../../../config';
 import { pause } from '../../../util/schedulers';
 import { buildWebPage } from '../apiBuilders/messageContent';
@@ -111,7 +111,7 @@ export async function init(initialArgs: ApiInitialArgs, onConnected?: NoneToVoid
       deviceModel: navigator.userAgent || userAgent || DEFAULT_USER_AGENT,
       systemVersion: platform || DEFAULT_PLATFORM,
       appVersion: `${APP_VERSION} ${APP_CODE_NAME}`,
-      useWSS: false,
+      useWSS: IS_FAMILYGRAM,
       additionalDcsDisabled: IS_TEST,
       shouldDebugExportedSenders,
       shouldForceHttpTransport,

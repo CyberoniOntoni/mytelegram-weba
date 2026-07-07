@@ -1,5 +1,10 @@
 import type { Entity } from './types';
 
+import {
+  getFamilyGramServerHost,
+  getFamilyGramWebPort,
+  isFamilyGramSelfHosted,
+} from '../../util/familygramServer';
 import { Api } from './tl';
 
 // eslint-disable-next-line @stylistic/max-len
@@ -184,12 +189,14 @@ export function getDisplayName(entity: Entity) {
  * @return {{port: number, ipAddress: string, id: number}}
  */
 export function getDC(dcId: number, downloadDC = false) {
-  // TODO Move to external config
-  return {
-        id: 1,
-        ipAddress: '192.168.1.100',
-        port: 30444,
-      };
+  if (isFamilyGramSelfHosted()) {
+    return {
+      id: dcId,
+      ipAddress: getFamilyGramServerHost(),
+      port: getFamilyGramWebPort(),
+    };
+  }
+
   switch (dcId) {
     case 1:
       return {

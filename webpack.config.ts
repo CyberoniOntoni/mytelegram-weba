@@ -26,6 +26,8 @@ const {
   APP_MOCKED_CLIENT = '',
   HTTPS_CERT_PATH = '',
   HTTPS_KEY_PATH = '',
+  FAMILYGRAM_SELF_HOSTED = '',
+  FAMILYGRAM_GATEWAY_URL = 'http://127.0.0.1:30444',
 } = process.env;
 
 const DEFAULT_APP_TITLE = `Telegram${APP_ENV !== 'production' ? ' Beta' : ''}`;
@@ -40,7 +42,7 @@ const {
 
 const CSP = `
   default-src 'self';
-  connect-src 'self' ws://192.168.1.100:30444 blob: http: https: ${APP_ENV === 'development' ? 'wss: ipc:' : ''};
+  connect-src 'self' blob: http: https: ws: wss: ${APP_ENV === 'development' ? 'ipc:' : ''};
   script-src 'self' 'wasm-unsafe-eval' https://t.me/_websync_ https://telegram.me/_websync_;
   style-src 'self' 'unsafe-inline';
   img-src 'self' data: blob: https://ss3.4sqi.net/img/categories_v2/;
@@ -110,6 +112,17 @@ export default function createConfig(
       headers: {
         'Content-Security-Policy': CSP,
       },
+      ...(FAMILYGRAM_SELF_HOSTED === '1' ? {
+        proxy: [
+          {
+            context: ['/apiws', '/apiw1'],
+            target: FAMILYGRAM_GATEWAY_URL,
+            ws: true,
+            changeOrigin: true,
+            secure: false,
+          },
+        ],
+      } : {}),
     },
 
     output: {
@@ -231,6 +244,8 @@ export default function createConfig(
         // eslint-disable-next-line no-null/no-null
         TEST_SESSION: null,
         BASE_URL,
+        FAMILYGRAM_SELF_HOSTED: FAMILYGRAM_SELF_HOSTED || '0',
+        PRODUCTION_HOSTNAME: process.env.PRODUCTION_HOSTNAME || '',
       }),
       // Updates each dev re-build to provide current git branch or commit hash
       new DefinePlugin({

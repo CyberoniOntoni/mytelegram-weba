@@ -1,6 +1,6 @@
 import { getActions } from '../global';
 
-import { PRODUCTION_HOSTNAME, WEB_VERSION_BASE } from '../config';
+import { IS_FAMILYGRAM, PRODUCTION_HOSTNAME, WEB_VERSION_BASE } from '../config';
 import { clearWebsync } from './websync';
 
 type AvailableVersions = 'Z' | 'K';
@@ -31,7 +31,7 @@ export function switchPermanentWebVersion(version: AvailableVersions) {
 }
 
 export function checkAndAssignPermanentWebVersion() {
-  if (window.location.hostname !== PRODUCTION_HOSTNAME) return;
+  if (IS_FAMILYGRAM || window.location.hostname !== PRODUCTION_HOSTNAME) return;
 
   const referrer = document.referrer.toLowerCase();
   if (!referrer) return;
