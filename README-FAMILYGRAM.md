@@ -2,7 +2,28 @@
 
 Self-hosted [Telegram Web A](https://github.com/Ajaxy/telegram-tt) fork for [Testgram](https://github.com/CyberoniOntoni/testgram) servers.
 
-The web client is served from the **same host** as the MTProto web gateway — no server prompt. nginx (or NPM) proxies `/apiws` and `/apiw1` to the Testgram gateway on port `30444`.
+The web client is served from the **same host** as the MTProto web gateway — no server prompt. nginx (or NPM) proxies `/apiws` and `/apiw1` to the Testgram **Docker** gateway on host port `30444`.
+
+### Docker connectivity
+
+Testgram runs in Docker Compose; `gateway-server` publishes web transport to the **LXC host**:
+
+| Port | Role |
+|------|------|
+| `30444` | HTTP/WebSocket (`/apiws`, `/apiw1`) — **FamilyGram Web uses this** |
+| `30443` | HTTPS/WSS (passkey / direct TLS) |
+
+The browser never talks to Docker directly. Chain:
+
+```text
+wss://web.example.com/apiws  →  NPM :443  →  nginx :8080  →  127.0.0.1:30444 (Docker port publish)
+```
+
+On the LXC, verify before going live:
+
+```bash
+bash deploy/verify-gateway.sh
+```
 
 ## Quick start (development)
 

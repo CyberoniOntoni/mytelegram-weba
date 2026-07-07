@@ -1,8 +1,21 @@
-# FamilyGram Web — nginx on the Testgram LXC host
-# Serves the static build and proxies MTProto web transport to the gateway.
+# FamilyGram Web — nginx on the Testgram LXC host (same machine as Docker Compose)
 #
-# NPM (optional): point web.example.com → this host:8080 with SSL.
+# Testgram gateway-server publishes HTTP web transport on host port 30444:
+#   docker compose ports: "30444:30444"  (App__Servers__5__Port, Ssl=false)
+# nginx proxies browser /apiws and /apiw1 to that host port — NOT into the Docker network.
+#
+# Traffic chain (production):
+#   Browser wss://web.example.com/apiws
+#     → NPM :443 (SSL termination, websockets ON)
+#     → this nginx :8080
+#     → 127.0.0.1:30444 (Docker-published gateway HTTP/WS port)
+#
 # Replace example.com with your domain.
+
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    ''      close;
+}
 
 server {
     listen 8080;
@@ -21,23 +34,29 @@ server {
         proxy_pass http://127.0.0.1:30444;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
+        proxy_set_header Connection $connection_upgrade;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_buffering off;
         proxy_read_timeout 86400;
+        proxy_send_timeout 86400;
     }
 
     # MTProto HTTP long-poll fallback (client: https://web.example.com/apiw1)
     location /apiw1 {
         proxy_pass http://127.0.0.1:30444;
         proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_buffering off;
         proxy_read_timeout 86400;
+        proxy_send_timeout 86400;
     }
 
     # Cache hashed assets
