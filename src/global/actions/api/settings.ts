@@ -9,6 +9,7 @@ import {
 import {
   APP_CONFIG_REFETCH_INTERVAL,
   COUNTRIES_WITH_12H_TIME_FORMAT,
+  IS_FAMILYGRAM,
   MUTE_INDEFINITE_TIMESTAMP,
   UNMUTE_TIMESTAMP,
 } from '../../../config';
@@ -625,7 +626,11 @@ addActionHandler('loadCountryList', async (global, actions, payload): Promise<vo
   let { langCode } = payload;
   if (!langCode) langCode = selectSharedSettings(global).language;
 
-  const countryList = await callApi('fetchCountryList', { langCode });
+  let countryList = await callApi('fetchCountryList', { langCode });
+  if (!countryList && IS_FAMILYGRAM) {
+    const { getFamilyGramFallbackCountryList } = await import('../../../util/familygramCountries');
+    countryList = getFamilyGramFallbackCountryList();
+  }
   if (!countryList) return;
 
   global = getGlobal();

@@ -3,12 +3,17 @@ import { ManagementProgress } from '../../../types';
 
 import {
   CUSTOM_BG_CACHE_NAME,
+  IS_FAMILYGRAM,
   LANG_CACHE_NAME,
   LOCK_SCREEN_ANIMATION_DURATION_MS,
   MEDIA_CACHE_NAME,
   MEDIA_CACHE_NAME_AVATARS,
   MEDIA_PROGRESSIVE_CACHE_NAME,
 } from '../../../config';
+import {
+  FAMILYGRAM_DEFAULT_COUNTRY_ISO,
+  getFamilyGramFallbackCountryList,
+} from '../../../util/familygramCountries';
 import { updateAppBadge } from '../../../util/appBadge';
 import { PASSCODE_IDB_STORE } from '../../../util/browser/idb';
 import { toCredentialRequestOptions } from '../../../util/browser/passkeys';
@@ -44,6 +49,14 @@ import { selectSharedSettings } from '../../selectors/sharedState';
 import { destroySharedStatePort } from '../../shared/sharedStateConnector';
 
 addActionHandler('initApi', (global, actions): ActionReturnType => {
+  if (IS_FAMILYGRAM && !global.countryList.phoneCodes.length) {
+    global = {
+      ...global,
+      countryList: getFamilyGramFallbackCountryList(),
+    };
+    setGlobal(global);
+  }
+
   const initialLocationHash = parseInitialLocationHash();
   const {
     shouldAllowHttpTransport,
@@ -267,10 +280,17 @@ addActionHandler('destroyConnection', (): ActionReturnType => {
 
 addActionHandler('loadNearestCountry', async (global): Promise<void> => {
   if (global.connectionState !== 'connectionStateReady') {
+    if (IS_FAMILYGRAM && !global.auth.nearestCountry) {
+      global = updateAuth(global, { nearestCountry: FAMILYGRAM_DEFAULT_COUNTRY_ISO });
+      setGlobal(global);
+    }
     return;
   }
 
-  const authNearestCountry = await callApi('fetchNearestCountry');
+  let authNearestCountry = await callApi('fetchNearestCountry');
+  if (!authNearestCountry && IS_FAMILYGRAM) {
+    authNearestCountry = FAMILYGRAM_DEFAULT_COUNTRY_ISO;
+  }
 
   global = getGlobal();
   global = updateAuth(global, {

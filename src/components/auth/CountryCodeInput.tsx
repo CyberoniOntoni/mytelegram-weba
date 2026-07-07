@@ -7,6 +7,9 @@ import { withGlobal } from '../../global';
 
 import type { ApiCountryCode } from '../../api/types';
 
+import { IS_FAMILYGRAM } from '../../config';
+import { FAMILYGRAM_FALLBACK_PHONE_CODES } from '../../util/familygramCountries';
+
 import { ANIMATION_END_DELAY } from '../../config';
 import { IS_TAURI } from '../../util/browser/globalEnvironment';
 import { IS_EMOJI_SUPPORTED } from '../../util/browser/windowEnvironment';
@@ -183,7 +186,10 @@ function getFilteredList(countryList: ApiCountryCode[], filter = ''): ApiCountry
 
 export default memo(withGlobal<OwnProps>(
   (global): Complete<StateProps> => {
-    const { countryList: { phoneCodes: phoneCodeList } } = global;
+    const { countryList: { phoneCodes } } = global;
+    const phoneCodeList = phoneCodes.length || !IS_FAMILYGRAM
+      ? phoneCodes
+      : FAMILYGRAM_FALLBACK_PHONE_CODES;
     return {
       phoneCodeList,
     };

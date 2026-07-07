@@ -148,6 +148,9 @@ export async function init(initialArgs: ApiInitialArgs, onConnected?: NoneToVoid
         initialMethod: IS_FAMILYGRAM || platform === 'iOS' || platform === 'Android'
           ? 'phoneNumber'
           : 'qrCode',
+        dcId: IS_FAMILYGRAM ? 1 : dcId,
+        shouldForceHttpTransport,
+        shouldAllowHttpTransport: IS_FAMILYGRAM ? true : shouldAllowHttpTransport,
         shouldThrowIfUnauthorized: Object.values(sessionData?.keys || {}).length > 0,
         webAuthToken,
         webAuthTokenFailed: onWebAuthTokenFailed,

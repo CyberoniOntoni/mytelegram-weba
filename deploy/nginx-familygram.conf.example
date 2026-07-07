@@ -13,6 +13,8 @@
 # Replace example.com with your domain.
 # If 8082 is also in use: ss -tlnp | grep -E '808[0-9]' and pick a free port.
 
+# Place this map in /etc/nginx/nginx.conf inside http { } if your distro
+# does not allow map in a site file (Debian/Ubuntu site files are fine).
 map $http_upgrade $connection_upgrade {
     default upgrade;
     ''      close;

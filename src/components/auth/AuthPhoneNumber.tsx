@@ -7,6 +7,10 @@ import type { ApiCountryCode } from '../../api/types';
 import type { GlobalState } from '../../global/types';
 
 import { IS_FAMILYGRAM } from '../../config';
+import {
+  FAMILYGRAM_DEFAULT_COUNTRY_ISO,
+  FAMILYGRAM_FALLBACK_PHONE_CODES,
+} from '../../util/familygramCountries';
 import { requestMeasure } from '../../lib/fasterdom/fasterdom';
 import { IS_SAFARI, IS_TOUCH_ENV } from '../../util/browser/windowEnvironment';
 import { preloadImage } from '../../util/files';
@@ -77,6 +81,9 @@ const AuthPhoneNumber = ({
   const suggestedLanguage = getSuggestedLanguage();
 
   const isConnected = connectionState === 'connectionStateReady';
+  const effectivePhoneCodeList = phoneCodeList.length || !IS_FAMILYGRAM
+    ? phoneCodeList
+    : FAMILYGRAM_FALLBACK_PHONE_CODES;
   const continueText = useLangString('AuthContinueOnThisLanguage', suggestedLanguage);
   const [country, setCountry] = useState<ApiCountryCode | undefined>();
   const [phoneNumber, setPhoneNumber] = useState<string | undefined>();
@@ -111,23 +118,36 @@ const AuthPhoneNumber = ({
   }, [isConnected, nearestCountry]);
 
   useEffect(() => {
-    if (isConnected) {
+    if (isConnected || IS_FAMILYGRAM) {
       loadCountryList({ langCode: language });
     }
   }, [isConnected, language]);
 
   useEffect(() => {
-    if (nearestCountry && phoneCodeList && !country && !isTouched) {
-      setCountry(getCountryCodeByIso(phoneCodeList, nearestCountry));
+    if (IS_FAMILYGRAM && !nearestCountry) {
+      loadNearestCountry();
     }
-  }, [country, nearestCountry, isTouched, phoneCodeList]);
+  }, [IS_FAMILYGRAM, nearestCountry]);
+
+  useEffect(() => {
+    if (IS_FAMILYGRAM && !country && !isTouched && effectivePhoneCodeList.length) {
+      const iso = nearestCountry || FAMILYGRAM_DEFAULT_COUNTRY_ISO;
+      setCountry(getCountryCodeByIso(effectivePhoneCodeList, iso) || effectivePhoneCodeList[0]);
+      return;
+    }
+
+    if (nearestCountry && effectivePhoneCodeList.length && !country && !isTouched) {
+      setCountry(getCountryCodeByIso(effectivePhoneCodeList, nearestCountry));
+    }
+  }, [country, nearestCountry, isTouched, effectivePhoneCodeList]);
 
   const parseFullNumber = useLastCallback((newFullNumber: string) => {
     if (!newFullNumber.length) {
       setPhoneNumber('');
     }
 
-    const suggestedCountry = phoneCodeList && getCountryFromPhoneNumber(phoneCodeList, newFullNumber);
+    const suggestedCountry = effectivePhoneCodeList.length
+      && getCountryFromPhoneNumber(effectivePhoneCodeList, newFullNumber);
 
     // Any phone numbers should be allowed, in some cases ignoring formatting
     const selectedCountry = !country
@@ -257,11 +277,18 @@ const AuthPhoneNumber = ({
         <div id="logo" />
         <h1>{lang('AuthTitle')}</h1>
         <p className="note">{lang('StartText')}</p>
+        {IS_FAMILYGRAM && !isConnected && (
+          <p className="note">
+            {connectionState === 'connectionStateBroken'
+              ? 'Cannot connect to the server. Check that NPM has Websockets enabled and wss://web.50bar.app/apiws works.'
+              : 'Connecting to server…'}
+          </p>
+        )}
         <form className="form" action="" onSubmit={handleSubmit}>
           <CountryCodeInput
             id="sign-in-phone-code"
             value={country}
-            isLoading={!nearestCountry && !country}
+            isLoading={!IS_FAMILYGRAM && !nearestCountry && !country}
             onChange={handleCountryChange}
           />
           <InputText
@@ -330,11 +357,15 @@ export default memo(withGlobal(
   (global): Complete<StateProps> => {
     const {
       sharedState: { settings: { language } },
-      countryList: { phoneCodes: phoneCodeList },
+      countryList: { phoneCodes },
       config,
       auth,
       connectionState,
     } = global;
+
+    const phoneCodeList = phoneCodes.length || !IS_FAMILYGRAM
+      ? phoneCodes
+      : FAMILYGRAM_FALLBACK_PHONE_CODES;
 
     return {
       auth,
