@@ -233,9 +233,10 @@ export function buildApiCallProtocol(protocol: GramJs.PhoneCallProtocol): ApiCal
 }
 
 export function buildCallProtocol() {
+  // Testgram validates minLayer=65 and maxLayer=92 (Telegram legacy voice-call range).
   return new GramJs.PhoneCallProtocol({
-    libraryVersions: ['4.0.0'],
-    minLayer: 92,
+    libraryVersions: ['2.7.7'],
+    minLayer: 65,
     maxLayer: 92,
     udpReflector: true,
     udpP2p: true,

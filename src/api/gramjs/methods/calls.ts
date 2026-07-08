@@ -22,6 +22,23 @@ const DH_RANDOM_LENGTH = 256;
 
 let cachedDhConfig: { g: number; p: number[]; version: number } | undefined;
 
+function bytesToNumberArray(value: Buffer | Uint8Array | number[]): number[] {
+  if (Array.isArray(value)) return value;
+  return Array.from(value);
+}
+
+function isDhConfigFull(
+  dhConfig: GramJs.messages.TypeDhConfig,
+): dhConfig is GramJs.messages.DhConfig {
+  return 'g' in dhConfig && 'p' in dhConfig && 'version' in dhConfig;
+}
+
+function isDhConfigNotModified(
+  dhConfig: GramJs.messages.TypeDhConfig,
+): dhConfig is GramJs.messages.DhConfigNotModified {
+  return 'random' in dhConfig && !('g' in dhConfig);
+}
+
 export async function getGroupCall({
   call,
 }: {
@@ -253,28 +270,28 @@ export async function getDhConfig() {
 
   if (!dhConfig) return undefined;
 
-  if (dhConfig instanceof GramJs.messages.DhConfigNotModified) {
+  if (isDhConfigNotModified(dhConfig)) {
     if (!cachedDhConfig) return undefined;
 
     return {
       g: cachedDhConfig.g,
       p: cachedDhConfig.p,
-      random: Array.from(dhConfig.random),
+      random: bytesToNumberArray(dhConfig.random),
     };
   }
 
-  if (!(dhConfig instanceof GramJs.messages.DhConfig)) return undefined;
+  if (!isDhConfigFull(dhConfig)) return undefined;
 
   cachedDhConfig = {
     g: dhConfig.g,
-    p: Array.from(dhConfig.p),
+    p: bytesToNumberArray(dhConfig.p),
     version: dhConfig.version,
   };
 
   return {
     g: cachedDhConfig.g,
     p: cachedDhConfig.p,
-    random: Array.from(dhConfig.random),
+    random: bytesToNumberArray(dhConfig.random),
   };
 }
 
