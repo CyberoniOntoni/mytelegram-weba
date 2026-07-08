@@ -357,14 +357,6 @@ export async function joinPhoneCall(
     dataChannel: dc,
   };
 
-  try {
-    await toggleStreamP2p('audio', true);
-  } catch (err) {
-    logPhoneCallDebug('Failed to enable microphone for phone call', {
-      error: err instanceof Error ? err.message : String(err),
-    });
-  }
-
   if (isOutgoing) {
     const offerCreated = await createOffer(conn, {
       offerToReceiveAudio: true,
@@ -374,6 +366,16 @@ export async function joinPhoneCall(
     if (!offerCreated) {
       throw new Error('Failed to create phone call offer');
     }
+  }
+
+  // Enable the real microphone after the initial offer/signaling on outgoing calls.
+  // Safari/iOS is sensitive to replacing tracks before the first local SDP is built.
+  try {
+    await toggleStreamP2p('audio', true);
+  } catch (err) {
+    logPhoneCallDebug('Failed to enable microphone for phone call', {
+      error: err instanceof Error ? err.message : String(err),
+    });
   }
 }
 

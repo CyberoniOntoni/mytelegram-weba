@@ -158,22 +158,9 @@ async function runPhoneCallConfirm(call: ApiPhoneCall) {
     });
 
     if (activeCall && typeof activeCall === 'object' && 'state' in activeCall) {
-      let latestGlobal = getGlobal();
-      if (latestGlobal.phoneCall?.id === activeCallId) {
-        const mergedCall = preservePhoneCallFields(latestGlobal.phoneCall, activeCall as ApiPhoneCall);
-        latestGlobal = {
-          ...latestGlobal,
-          phoneCall: mergedCall,
-        };
-        setGlobal(latestGlobal);
-      }
-
-      latestGlobal = getGlobal();
-      const mergedActiveCall = latestGlobal.phoneCall?.id === activeCallId
-        ? latestGlobal.phoneCall!
-        : (activeCall as ApiPhoneCall);
-      const isOutgoing = normalizeUserId(mergedActiveCall.adminId) === normalizeUserId(latestGlobal.currentUserId);
-      await startActivePhoneCallIfNeeded(mergedActiveCall, isOutgoing, getActions());
+      const latestGlobal = getGlobal();
+      const isOutgoing = normalizeUserId(activeCall.adminId) === normalizeUserId(latestGlobal.currentUserId);
+      await startActivePhoneCallIfNeeded(activeCall as ApiPhoneCall, isOutgoing, getActions());
     }
   } catch (err) {
     confirmedCallIds.delete(call.id);
@@ -337,17 +324,9 @@ async function startActivePhoneCall(
     setGlobal(global);
   }
 
-  let global = getGlobal();
+  const global = getGlobal();
   if (global.phoneCall?.id !== activeCallId) {
     return;
-  }
-
-  if (call.state === 'active' && global.phoneCall.state !== 'active') {
-    global = {
-      ...global,
-      phoneCall: preservePhoneCallFields(global.phoneCall, call),
-    };
-    setGlobal(global);
   }
 
   await joinPhoneCall(
@@ -470,7 +449,7 @@ addActionHandler('apiUpdate', (global, actions, update): ActionReturnType => {
         }, getCurrentTabId());
       } else if (shouldConfirmPhoneCall(call, currentUserId)) {
         void runPhoneCallConfirm(call);
-      } else if (state === 'active' && connections?.length && phoneCall?.state !== 'active') {
+      } else if (state === 'active' && connections?.length && !startedCallIds.has(call.id)) {
         void (async () => {
           try {
             await startActivePhoneCallIfNeeded(call, isOutgoing, actions);

@@ -283,10 +283,11 @@ addActionHandler('acceptCall', async (global): Promise<void> => {
 });
 
 addActionHandler('sendSignalingData', (global, actions, payload): ActionReturnType => {
+  const capturedPhoneCall = global.phoneCall;
   const data = JSON.stringify(payload);
 
   (async () => {
-    const { phoneCall } = getGlobal();
+    const phoneCall = getGlobal().phoneCall ?? capturedPhoneCall;
     if (!phoneCall) {
       logPhoneCallDebug('Skipping signaling send because phone call state is missing');
       return;
