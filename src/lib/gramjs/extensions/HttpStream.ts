@@ -55,6 +55,10 @@ export default class HttpStream {
   }
 
   static getURL(ip: string, port: number, isTestServer?: boolean, isPremium?: boolean) {
+    if (process.env.FAMILYGRAM_SELF_HOSTED === '1') {
+      isTestServer = false;
+      isPremium = false;
+    }
     const suffix = `/apiw1${isTestServer ? '_test' : ''}${isPremium ? '_premium' : ''}`;
     const authority = (port === 443 || port === 80) ? ip : `${ip}:${port}`;
 

@@ -77,6 +77,11 @@ export default class PromisedWebSockets {
   }
 
   getWebSocketLink(ip: string, port: number, isTestServer?: boolean, isPremium?: boolean) {
+    // Self-hosted gateways expose a single /apiws path (no _premium/_test variants).
+    if (process.env.FAMILYGRAM_SELF_HOSTED === '1') {
+      isTestServer = false;
+      isPremium = false;
+    }
     const suffix = `/apiws${isTestServer ? '_test' : ''}${isPremium ? '_premium' : ''}`;
     const authority = (port === 443 || port === 80) ? ip : `${ip}:${port}`;
 
