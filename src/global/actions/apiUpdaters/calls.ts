@@ -3,6 +3,7 @@ import type { ActionReturnType } from '../../types';
 import { ARE_CALLS_SUPPORTED } from '../../../util/browser/windowEnvironment';
 import { getCurrentTabId } from '../../../util/establishMultitabRole';
 import { omit } from '../../../util/iteratees';
+import { callApi } from '../../../api/gramjs';
 import { notifyAboutCall } from '../../../util/notifications';
 import { onTickEnd } from '../../../util/schedulers';
 import { addActionHandler, getGlobal } from '../../index';
@@ -121,6 +122,8 @@ addActionHandler('apiUpdate', (global, actions, update): ActionReturnType => {
           ...global,
           phoneCall: call,
         };
+
+        void callApi('receivedCall', { call });
 
         return updateTabState(global, {
           isCallPanelVisible: false,

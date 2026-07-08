@@ -40,7 +40,33 @@ function isPhoneCallStateRegression(previousState?: PhoneCallState, nextState?: 
   return nextRank < previousRank;
 }
 
-function mergePhoneCallUpdate(previousCall: ApiPhoneCall | undefined, nextCall: ApiPhoneCall): ApiPhoneCall {
+function normalizeUserId(userId?: string | number) {
+  return userId?.toString();
+}
+
+function mergePhoneCallUpdate(
+  previousCall: ApiPhoneCall | undefined,
+  nextCall: ApiPhoneCall,
+  currentUserId?: string,
+): ApiPhoneCall {
+  const normalizedCurrentUserId = normalizeUserId(currentUserId);
+  const normalizedAdminId = normalizeUserId(nextCall.adminId);
+
+  // Accepted updates are caller-only. Ignore misrouted pushes on the callee device.
+  if (
+    nextCall.state === 'accepted'
+    && normalizedAdminId
+    && normalizedCurrentUserId
+    && normalizedAdminId !== normalizedCurrentUserId
+  ) {
+    return {
+      ...previousCall,
+      ...nextCall,
+      state: previousCall?.state ?? 'waiting',
+      gB: previousCall?.gB,
+    };
+  }
+
   const mergedCall: ApiPhoneCall = {
     ...previousCall,
     ...nextCall,
@@ -66,7 +92,7 @@ function shouldConfirmPhoneCall(call: ApiPhoneCall, currentUserId?: string) {
     call.state === 'accepted'
     && call.accessHash
     && call.gB?.length
-    && call.adminId === currentUserId
+    && normalizeUserId(call.adminId) === normalizeUserId(currentUserId)
     && !confirmedCallIds.has(call.id),
   );
 }
@@ -169,9 +195,9 @@ addActionHandler('apiUpdate', (global, actions, update): ActionReturnType => {
       if (!ARE_CALLS_SUPPORTED) return undefined;
       const { phoneCall, currentUserId } = global;
 
-      const call = mergePhoneCallUpdate(phoneCall, update.call);
+      const call = mergePhoneCallUpdate(phoneCall, update.call, currentUserId);
 
-      const isOutgoing = call.adminId === currentUserId;
+      const isOutgoing = normalizeUserId(call.adminId) === normalizeUserId(currentUserId);
 
       global = {
         ...global,
