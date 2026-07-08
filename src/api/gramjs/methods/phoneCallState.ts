@@ -1,9 +1,17 @@
 import { AuthKey } from '../../../lib/gramjs/crypto/AuthKey';
+import { SecurityError } from '../../../lib/gramjs/errors';
 import { Logger } from '../../../lib/gramjs/extensions';
 import {
   convertToLittle, getByteArray, modExp, readBigIntFromBuffer, sha1, sha256,
 } from '../../../lib/gramjs/Helpers';
 import MTProtoState from '../../../lib/gramjs/network/MTProtoState';
+
+const SHA256_HASH_BYTES = 32;
+
+type ConfirmCallOptions = {
+  gAHash?: number[];
+  expectedKeyFingerprint?: string;
+};
 
 type DhConfig = {
   p: number[];
@@ -25,6 +33,8 @@ class PhoneCallState {
   private p?: bigint;
 
   private random?: bigint;
+
+  private keyFingerprint?: string;
 
   private waitForState: Promise<void>;
 
@@ -64,16 +74,32 @@ class PhoneCallState {
     return Array.from(getByteArray(gB));
   }
 
-  async confirmCall(gAOrB: number[], emojiData: Uint16Array, emojiOffsets: number[]) {
+  async confirmCall(
+    gAOrB: number[],
+    emojiData: Uint16Array,
+    emojiOffsets: number[],
+    options?: ConfirmCallOptions,
+  ) {
     if (!this.random || !this.p) {
       throw new Error('Values not set');
     }
 
+    const peerValue = Buffer.from(gAOrB);
     if (this.isOutgoing) {
-      this.gB = readBigIntFromBuffer(Buffer.from(gAOrB), false);
+      this.gB = readBigIntFromBuffer(peerValue, false);
     } else {
-      this.gA = readBigIntFromBuffer(Buffer.from(gAOrB), false);
+      if (!options?.gAHash?.length) {
+        throw new SecurityError('Missing phone call gA hash');
+      }
+
+      if (!options.expectedKeyFingerprint) {
+        throw new SecurityError('Missing phone call key fingerprint');
+      }
+
+      await validateGAHash(peerValue, options.gAHash);
+      this.gA = readBigIntFromBuffer(peerValue, false);
     }
+
     const authKey = modExp(
       (!this.isOutgoing ? this.gA : this.gB)!,
       this.random,
@@ -81,6 +107,11 @@ class PhoneCallState {
     );
     const fingerprint: Buffer = await sha1(getByteArray(authKey));
     const keyFingerprint = readBigIntFromBuffer(fingerprint.slice(-8).reverse(), false);
+    const keyFingerprintString = keyFingerprint.toString();
+
+    if (options?.expectedKeyFingerprint && keyFingerprintString !== options.expectedKeyFingerprint) {
+      throw new SecurityError('Phone call key fingerprint mismatch');
+    }
 
     const emojis = await generateEmojiFingerprint(
       getByteArray(authKey),
@@ -92,9 +123,20 @@ class PhoneCallState {
     const key = new AuthKey();
     await key.setKey(getByteArray(authKey));
     this.state = new MTProtoState(key, new Logger(), true, this.isOutgoing);
+    this.keyFingerprint = keyFingerprintString;
     this.resolveState!();
 
-    return { gA: Array.from(getByteArray(this.gA!)), keyFingerprint: keyFingerprint.toString(), emojis };
+    return { gA: Array.from(getByteArray(this.gA!)), keyFingerprint: keyFingerprintString, emojis };
+  }
+
+  verifyKeyFingerprint(expectedKeyFingerprint: string) {
+    if (!this.keyFingerprint) {
+      throw new SecurityError('Phone call key fingerprint is not set');
+    }
+
+    if (this.keyFingerprint !== expectedKeyFingerprint) {
+      throw new SecurityError('Phone call key fingerprint mismatch');
+    }
   }
 
   async encode(data: string) {
@@ -131,6 +173,18 @@ function computeEmojiIndex(bytes: Uint8Array) {
     | ((BigInt(bytes[5]) << 16n))
     | ((BigInt(bytes[6]) << 8n))
     | ((BigInt(bytes[7])));
+}
+
+async function validateGAHash(gA: Buffer, expectedHash: number[]) {
+  if (expectedHash.length !== SHA256_HASH_BYTES) {
+    throw new SecurityError('Invalid phone call gA hash');
+  }
+
+  const actualHash = await sha256(gA);
+  const expected = Buffer.from(expectedHash);
+  if (actualHash.length !== expected.length || !actualHash.equals(expected)) {
+    throw new SecurityError('Phone call gA hash mismatch');
+  }
 }
 
 async function generateEmojiFingerprint(
@@ -180,7 +234,11 @@ export async function decodePhoneCallData(params: ParamsOf<'decode'>) {
 }
 
 export function confirmPhoneCall(params: ParamsOf<'confirmCall'>): ReturnTypeOf<'confirmCall'> {
-  return currentPhoneCallState!.confirmCall(...params);
+  return currentPhoneCallState!.confirmCall(...(params as Parameters<PhoneCallState['confirmCall']>));
+}
+
+export function verifyPhoneCallKeyFingerprint(expectedKeyFingerprint: string) {
+  return currentPhoneCallState!.verifyKeyFingerprint(expectedKeyFingerprint);
 }
 
 export function acceptPhoneCall(params: ParamsOf<'acceptCall'>): ReturnTypeOf<'acceptCall'> {

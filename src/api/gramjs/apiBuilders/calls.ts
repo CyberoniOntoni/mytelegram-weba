@@ -9,6 +9,7 @@ import type {
 } from '../../../lib/secret-sauce';
 import type { ApiGroupCall, ApiPhoneCall } from '../../types';
 
+import { CALL_PROTOCOL_LIBRARY_VERSIONS } from '../../../config';
 import { getApiChatIdFromMtpPeer, isMtpPeerUser } from './peers';
 
 export function buildApiGroupCallParticipant(participant: GramJs.GroupCallParticipant): GroupCallParticipant {
@@ -302,7 +303,7 @@ export function buildApiCallProtocol(protocol: GramJs.PhoneCallProtocol): ApiCal
 export function buildCallProtocol() {
   // Testgram validates minLayer=65 and maxLayer=92 (Telegram legacy voice-call range).
   return new GramJs.PhoneCallProtocol({
-    libraryVersions: ['2.7.7'],
+    libraryVersions: CALL_PROTOCOL_LIBRARY_VERSIONS,
     minLayer: 65,
     maxLayer: 92,
     udpReflector: true,

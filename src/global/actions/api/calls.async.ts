@@ -9,6 +9,7 @@ import {
   stopPhoneCall,
   toggleStream,
 } from '../../../lib/secret-sauce';
+import { logPhoneCallDebug } from '../../../lib/secret-sauce/phoneCallDebug';
 import { getCurrentTabId } from '../../../util/establishMultitabRole';
 import { callApi } from '../../../api/gramjs';
 import { addActionHandler, getGlobal, setGlobal } from '../../index';
@@ -293,7 +294,7 @@ addActionHandler('sendSignalingData', (global, actions, payload): ActionReturnTy
     const encodedData = await callApi('encodePhoneCallData', [data]);
 
     if (!encodedData) {
-      console.error('[PhoneCall] Failed to encode signaling data');
+      logPhoneCallDebug('Failed to encode signaling data');
       return;
     }
 

@@ -28,6 +28,8 @@ export const IS_BETA = process.env.APP_ENV === 'staging';
 export const PAID_MESSAGES_PURPOSE = 'paid_messages';
 
 export const DEBUG = process.env.APP_ENV !== 'production';
+export const DEBUG_CALLS = DEBUG;
+export const CALL_PROTOCOL_LIBRARY_VERSIONS = ['4.0.0', '4.0.1', '2.7.7'];
 export const DEBUG_MORE = false;
 export const DEBUG_LOG_FILENAME = 'tt-log.json';
 export const STRICTERDOM_ENABLED = DEBUG;

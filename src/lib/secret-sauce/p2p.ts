@@ -10,6 +10,7 @@ import {
   toTelegramSource,
 } from './utils';
 import buildSdp, { Conference } from './buildSdp';
+import { logPhoneCallDebug } from './phoneCallDebug';
 import { StreamType } from './secretsauce';
 
 type P2pState = {
@@ -371,7 +372,7 @@ function sendInitialSetup(sdp: P2pParsedSdp) {
 
   const videoGroup = sdp['ssrc-groups']?.[0];
   if (!videoGroup?.sources?.length) {
-    console.error('[PhoneCall] Missing video SSRC group in local SDP');
+    logPhoneCallDebug('Missing video SSRC group in local SDP');
     return;
   }
 
@@ -542,6 +543,8 @@ async function createOffer(conn: RTCPeerConnection, params: RTCOfferOptions) {
     enrichParsedSdp(conn, sdp);
     sendInitialSetup(sdp);
   } catch (err) {
-    console.error('[PhoneCall] Failed to create offer:', err);
+    logPhoneCallDebug('Failed to create offer', {
+      error: err instanceof Error ? err.message : String(err),
+    });
   }
 }
