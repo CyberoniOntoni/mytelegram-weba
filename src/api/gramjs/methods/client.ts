@@ -134,6 +134,7 @@ export async function init(initialArgs: ApiInitialArgs, onConnected?: NoneToVoid
       shouldAllowHttpTransport: IS_FAMILYGRAM ? false : shouldAllowHttpTransport,
       connectionRetries: IS_FAMILYGRAM ? 10 : undefined,
       connectionRetriesToFallback: IS_FAMILYGRAM ? 0 : undefined,
+      disableExportedSenders: IS_FAMILYGRAM,
       dcId,
       langPack: LANG_PACK,
       langCode,
@@ -432,7 +433,9 @@ export async function downloadMedia(
 }
 
 export function uploadFile(file: File, onProgress?: ApiOnProgress) {
-  return client.uploadFile({ file, onProgress, workers: UPLOAD_WORKERS });
+  return client.uploadFile({
+    file, onProgress, workers: IS_FAMILYGRAM ? 1 : UPLOAD_WORKERS,
+  });
 }
 
 export function updateTwoFaSettings(params: TwoFaParams) {

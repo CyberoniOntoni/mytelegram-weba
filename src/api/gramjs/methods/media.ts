@@ -7,7 +7,7 @@ import {
 } from '../../types';
 
 import {
-  DOWNLOAD_WORKERS,
+  DOWNLOAD_WORKERS, IS_FAMILYGRAM,
   MEDIA_CACHE_DISABLED,
   MEDIA_CACHE_MAX_BYTES,
   MEDIA_CACHE_NAME,
@@ -146,7 +146,8 @@ async function download(
       GramJs.Photo | GramJs.Document | GramJs.WebDocument
     );
     const data = await client.downloadMedia(entityWithType, {
-      sizeType, start, end, progressCallback: onProgress, workers: DOWNLOAD_WORKERS,
+      sizeType, start, end, progressCallback: onProgress,
+      workers: IS_FAMILYGRAM ? 1 : DOWNLOAD_WORKERS,
     });
     let mimeType;
     let fullSize;

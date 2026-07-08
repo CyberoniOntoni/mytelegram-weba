@@ -78,6 +78,7 @@ type TelegramClientParams = {
   shouldAllowHttpTransport: boolean;
   shouldForceHttpTransport: boolean;
   shouldDebugExportedSenders: boolean;
+  disableExportedSenders: boolean;
 };
 
 type TimeoutId = ReturnType<typeof setTimeout>;
@@ -142,6 +143,7 @@ class TelegramClient {
     shouldAllowHttpTransport: false,
     shouldForceHttpTransport: false,
     shouldDebugExportedSenders: false,
+    disableExportedSenders: false,
   };
 
   private _args: TelegramClientParams;
@@ -161,6 +163,8 @@ class TelegramClient {
   private _shouldAllowHttpTransport: boolean;
 
   private _shouldDebugExportedSenders: boolean;
+
+  private _disableExportedSenders: boolean;
 
   _log: Logger;
 
@@ -222,6 +226,7 @@ class TelegramClient {
     this._shouldForceHttpTransport = args.shouldForceHttpTransport;
     this._shouldAllowHttpTransport = args.shouldAllowHttpTransport;
     this._shouldDebugExportedSenders = args.shouldDebugExportedSenders;
+    this._disableExportedSenders = args.disableExportedSenders;
     // this._entityCache = new Set()
     if (typeof args.baseLogger === 'string') {
       this._log = new Logger();
@@ -348,8 +353,10 @@ class TelegramClient {
     this._isSwitchingDc = false;
 
     // Prepare file connection on current DC to speed up initial media loading
-    const mediaSender = await this._borrowExportedSender(this.session.dcId, false, undefined, 0, this.isPremium);
-    if (mediaSender) this.releaseExportedSender(mediaSender);
+    if (!this._disableExportedSenders) {
+      const mediaSender = await this._borrowExportedSender(this.session.dcId, false, undefined, 0, this.isPremium);
+      if (mediaSender) this.releaseExportedSender(mediaSender);
+    }
   }
 
   async _initSession() {
@@ -763,6 +770,10 @@ class TelegramClient {
   }
 
   getSender(dcId: number, index?: number, isPremium?: boolean) {
+    if (this._disableExportedSenders) {
+      return Promise.resolve(this._sender!);
+    }
+
     return dcId
       ? this._borrowExportedSender(dcId, undefined, undefined, index, isPremium)
       : Promise.resolve(this._sender!);
