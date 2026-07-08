@@ -78,12 +78,34 @@ export default (sessionDescription: RTCSessionDescriptionInit, isP2p = false): J
     });
   };
 
+  const parseSectionSsrcs = (sectionName: string) => (
+    sections[sectionName]
+      ?.filter((line) => line.startsWith('a=ssrc:'))
+      .map((line) => Number(line.slice(7).split(' ')[0]))
+      .filter((ssrc) => Number.isFinite(ssrc)) ?? []
+  );
+
+  const audioSsrcs = parseSectionSsrcs('audio');
   const rawSource = lookup('a=ssrc:', 'audio');
-  const sourceAudio = rawSource && Number(rawSource.split(' ')[0]);
+  const sourceAudio = (rawSource && Number(rawSource.split(' ')[0])) || audioSsrcs[0];
 
   // TODO multiple source groups
-  const rawSourceVideo = lookup('a=ssrc-group:', 'video')?.split(' ') || undefined;
-  const rawSourceScreencast = lookup('a=ssrc-group:', 'screencast')?.split(' ') || undefined;
+  let rawSourceVideo = lookup('a=ssrc-group:', 'video')?.split(' ') || undefined;
+  let rawSourceScreencast = lookup('a=ssrc-group:', 'screencast')?.split(' ') || undefined;
+
+  if (!rawSourceVideo) {
+    const videoSsrcs = parseSectionSsrcs('video');
+    if (videoSsrcs.length) {
+      rawSourceVideo = ['FID', ...videoSsrcs.map(String)];
+    }
+  }
+
+  if (!rawSourceScreencast) {
+    const screencastSsrcs = parseSectionSsrcs('screencast');
+    if (screencastSsrcs.length) {
+      rawSourceScreencast = ['FID', ...screencastSsrcs.map(String)];
+    }
+  }
 
   if (!rawSourceVideo) {
     throw Error('Failed parsing SDP: no video ssrc');
@@ -95,8 +117,6 @@ export default (sessionDescription: RTCSessionDescriptionInit, isP2p = false): J
   if (!hash || !fingerprint) {
     throw Error('Failed parsing SDP: no fingerprint');
   }
-
-  console.log(sections);
 
   const ufrag = lookup('a=ice-ufrag:');
   const pwd = lookup('a=ice-pwd:');

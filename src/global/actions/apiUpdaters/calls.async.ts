@@ -245,32 +245,35 @@ addActionHandler('apiUpdate', (global, actions, update): ActionReturnType => {
       } else if (shouldConfirmPhoneCall(call, currentUserId)) {
         void runPhoneCallConfirm(call);
       } else if (state === 'active' && connections && phoneCall?.state !== 'active') {
-        if (!isOutgoing) {
-          callApi('receivedCall', { call });
-          (async () => {
+        void (async () => {
+          if (!isOutgoing) {
+            callApi('receivedCall', { call });
             const { emojis } = await callApi('confirmPhoneCall', [call.gAOrB!, EMOJI_DATA, EMOJI_OFFSETS]);
 
             global = getGlobal();
-            const newCall = {
-              ...global.phoneCall,
-              emojis,
-            } as ApiPhoneCall;
-
             global = {
               ...global,
-              phoneCall: newCall,
+              phoneCall: {
+                ...global.phoneCall,
+                emojis,
+              } as ApiPhoneCall,
             };
             setGlobal(global);
-          })();
-        }
-        void joinPhoneCall(
-          connections,
-          actions.sendSignalingData,
-          isOutgoing,
-          Boolean(call?.isVideo),
-          Boolean(call.isP2pAllowed),
-          actions.apiUpdate,
-        );
+          }
+
+          try {
+            await joinPhoneCall(
+              connections,
+              actions.sendSignalingData,
+              isOutgoing,
+              Boolean(call?.isVideo),
+              Boolean(call.isP2pAllowed),
+              actions.apiUpdate,
+            );
+          } catch (err) {
+            console.error('[PhoneCall] Failed to join phone call:', err);
+          }
+        })();
       }
 
       return global;

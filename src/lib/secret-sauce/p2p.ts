@@ -5,8 +5,9 @@ import type { MediaContent, MediaStateMessage, P2pMessage } from './p2pMessage';
 import {
   fromTelegramSource,
   IS_ECHO_CANCELLATION_SUPPORTED,
-  IS_NOISE_SUPPRESSION_SUPPORTED, 
+  IS_NOISE_SUPPRESSION_SUPPORTED,
   p2pPayloadTypeToConference,
+  toTelegramSource,
 } from './utils';
 import buildSdp, { Conference } from './buildSdp';
 import { StreamType } from './secretsauce';
@@ -39,6 +40,29 @@ type P2pState = {
 let state: P2pState | undefined;
 
 const ICE_CANDIDATE_POOL_SIZE = 10;
+
+function randomTelegramSsrc() {
+  return toTelegramSource(Math.floor(Math.random() * 0x7fffffff));
+}
+
+function enrichParsedSdp(conn: RTCPeerConnection, sdp: P2pParsedSdp) {
+  if (!sdp.ssrc) {
+    const audioSender = conn.getSenders().find((sender) => sender.track?.kind === 'audio');
+    const senderSsrc = audioSender?.getParameters().encodings?.[0]?.ssrc;
+    sdp.ssrc = senderSsrc ? toTelegramSource(senderSsrc) : randomTelegramSsrc();
+  }
+
+  if (!sdp['ssrc-groups']?.[0]?.sources?.length) {
+    const videoSender = conn.getSenders().find((sender) => sender.track?.kind === 'video');
+    const senderSsrc = videoSender?.getParameters().encodings?.[0]?.ssrc;
+    if (senderSsrc) {
+      sdp['ssrc-groups'] = [{
+        semantics: 'FID',
+        sources: [toTelegramSource(senderSsrc)],
+      }];
+    }
+  }
+}
 
 export function getStreams() {
   return state?.streams;
@@ -345,7 +369,16 @@ function sendInitialSetup(sdp: P2pParsedSdp) {
   if (!state) return;
   const { emitSignalingData } = state;
 
-  if (!sdp.ssrc || !sdp['ssrc-groups'] || !sdp['ssrc-groups'][0] || !sdp['ssrc-groups'][1]) return;
+  const videoGroup = sdp['ssrc-groups']?.[0];
+  if (!videoGroup?.sources?.length) {
+    console.error('[PhoneCall] Missing video SSRC group in local SDP');
+    return;
+  }
+
+  const audioSsrc = sdp.ssrc ?? randomTelegramSsrc();
+
+  // Browsers with max-bundle may omit a separate screencast m= section; reuse video SSRCs.
+  const screencastGroup = sdp['ssrc-groups']?.[1] ?? videoGroup;
 
   emitSignalingData({
     '@type': 'InitialSetup',
@@ -353,28 +386,28 @@ function sendInitialSetup(sdp: P2pParsedSdp) {
     ufrag: sdp.ufrag,
     pwd: sdp.pwd,
     audio: {
-      ssrc: fromTelegramSource(sdp.ssrc).toString(),
+      ssrc: fromTelegramSource(audioSsrc).toString(),
       ssrcGroups: [],
       payloadTypes: sdp.audioPayloadTypes,
       rtpExtensions: sdp.audioExtmap,
     },
     video: filterVP8({
-      ssrc: fromTelegramSource(sdp['ssrc-groups'][0].sources[0]).toString(),
+      ssrc: fromTelegramSource(videoGroup.sources[0]).toString(),
       ssrcGroups: [{
-        semantics: sdp['ssrc-groups'][0].semantics,
-        ssrcs: sdp['ssrc-groups'][0].sources.map(fromTelegramSource),
+        semantics: videoGroup.semantics,
+        ssrcs: videoGroup.sources.map(fromTelegramSource),
       }],
       payloadTypes: sdp.videoPayloadTypes,
       rtpExtensions: sdp.videoExtmap,
     }),
     screencast: filterVP8({
-      ssrc: fromTelegramSource(sdp['ssrc-groups'][1].sources[0]).toString(),
+      ssrc: fromTelegramSource(screencastGroup.sources[0]).toString(),
       ssrcGroups: [{
-        semantics: sdp['ssrc-groups'][1].semantics,
-        ssrcs: sdp['ssrc-groups'][1].sources.map(fromTelegramSource),
+        semantics: screencastGroup.semantics,
+        ssrcs: screencastGroup.sources.map(fromTelegramSource),
       }],
-      payloadTypes: sdp.screencastPayloadTypes,
-      rtpExtensions: sdp.screencastExtmap,
+      payloadTypes: sdp.screencastPayloadTypes ?? sdp.videoPayloadTypes,
+      rtpExtensions: sdp.screencastExtmap ?? sdp.videoExtmap,
     }),
   });
 }
@@ -467,7 +500,9 @@ export async function processSignalingMessage(message: P2pMessage) {
       if (!isOutgoing) {
         const answer = await connection.createAnswer();
         await connection.setLocalDescription(answer);
-        sendInitialSetup(parseSdp(connection.localDescription!, true) as P2pParsedSdp);
+        const sdp = parseSdp(connection.localDescription!, true) as P2pParsedSdp;
+        enrichParsedSdp(connection, sdp);
+        sendInitialSetup(sdp);
       }
       state.gotInitialSetup = true;
       await commitPendingIceCandidates();
@@ -500,7 +535,13 @@ async function tryAddCandidate(connection: RTCPeerConnection, candidate: string)
 }
 
 async function createOffer(conn: RTCPeerConnection, params: RTCOfferOptions) {
-  const offer = await conn.createOffer(params);
-  await conn.setLocalDescription(offer);
-  sendInitialSetup(parseSdp(conn.localDescription!, true) as P2pParsedSdp);
+  try {
+    const offer = await conn.createOffer(params);
+    await conn.setLocalDescription(offer);
+    const sdp = parseSdp(conn.localDescription!, true) as P2pParsedSdp;
+    enrichParsedSdp(conn, sdp);
+    sendInitialSetup(sdp);
+  } catch (err) {
+    console.error('[PhoneCall] Failed to create offer:', err);
+  }
 }

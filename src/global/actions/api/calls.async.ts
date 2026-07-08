@@ -292,7 +292,10 @@ addActionHandler('sendSignalingData', (global, actions, payload): ActionReturnTy
   (async () => {
     const encodedData = await callApi('encodePhoneCallData', [data]);
 
-    if (!encodedData) return;
+    if (!encodedData) {
+      console.error('[PhoneCall] Failed to encode signaling data');
+      return;
+    }
 
     callApi('sendSignalingData', { data: encodedData, call: phoneCall });
   })();
