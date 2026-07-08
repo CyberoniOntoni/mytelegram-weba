@@ -23,6 +23,7 @@ import {
 } from '../../selectors/calls';
 import { getGroupCallAudioContext, getGroupCallAudioElement, removeGroupCallAudioElement } from '../ui/calls';
 import { loadFullChat } from './chats';
+import { confirmAcceptedPhoneCallIfNeeded } from '../apiUpdaters/calls.async';
 
 const HANG_UP_UI_DELAY = 500;
 
@@ -260,7 +261,10 @@ addActionHandler('connectToActivePhoneCall', async (global, actions): Promise<vo
 
   if (!result) {
     if ('hangUp' in actions) actions.hangUp({ tabId: getCurrentTabId() });
+    return;
   }
+
+  await confirmAcceptedPhoneCallIfNeeded(getGlobal());
 });
 
 addActionHandler('acceptCall', async (global): Promise<void> => {

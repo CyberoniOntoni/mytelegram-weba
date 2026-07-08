@@ -106,81 +106,143 @@ export function getGroupCallId(groupCall: GramJs.TypeInputGroupCall) {
   return undefined;
 }
 
+type PhoneCallKind = 'waiting' | 'requested' | 'accepted' | 'active' | 'discarded';
+
+const PHONE_CALL_CONSTRUCTOR_IDS: Record<PhoneCallKind, number> = {
+  waiting: 3307368215,
+  requested: 347139340,
+  accepted: 912311057,
+  active: 810769141,
+  discarded: 1355435489,
+};
+
+function bytesToNumberArray(value: Buffer | Uint8Array | number[] | undefined): number[] | undefined {
+  if (value == null) return undefined;
+  if (Array.isArray(value)) return value;
+  return Array.from(value);
+}
+
+function getPhoneCallKind(call: GramJs.TypePhoneCall): PhoneCallKind | undefined {
+  if (call instanceof GramJs.PhoneCallWaiting) return 'waiting';
+  if (call instanceof GramJs.PhoneCallRequested) return 'requested';
+  if (call instanceof GramJs.PhoneCallAccepted) return 'accepted';
+  if (call instanceof GramJs.PhoneCall) return 'active';
+  if (call instanceof GramJs.PhoneCallDiscarded) return 'discarded';
+
+  const constructorId = (call as { CONSTRUCTOR_ID?: number }).CONSTRUCTOR_ID;
+  if (constructorId) {
+    const entry = Object.entries(PHONE_CALL_CONSTRUCTOR_IDS).find(([, id]) => id === constructorId);
+    if (entry) return entry[0] as PhoneCallKind;
+  }
+
+  const rawCall = call as unknown as Record<string, unknown>;
+  if (rawCall.gAOrB != null || rawCall.g_a_or_b != null) return 'active';
+  if (rawCall.gB != null || rawCall.g_b != null) return 'accepted';
+  if (rawCall.gAHash != null || rawCall.g_a_hash != null) return 'requested';
+  if (rawCall.reason != null) return 'discarded';
+  if (rawCall.protocol != null) return 'waiting';
+
+  return undefined;
+}
+
+function readPhoneCallFields(call: GramJs.TypePhoneCall) {
+  const rawCall = call as unknown as Record<string, unknown>;
+
+  return {
+    accessHash: rawCall.accessHash ?? rawCall.access_hash,
+    adminId: rawCall.adminId ?? rawCall.admin_id,
+    participantId: rawCall.participantId ?? rawCall.participant_id,
+    date: rawCall.date,
+    video: rawCall.video,
+    protocol: rawCall.protocol,
+    receiveDate: rawCall.receiveDate ?? rawCall.receive_date,
+    gB: rawCall.gB ?? rawCall.g_b,
+    gAHash: rawCall.gAHash ?? rawCall.g_a_hash,
+    gAOrB: rawCall.gAOrB ?? rawCall.g_a_or_b,
+    keyFingerprint: rawCall.keyFingerprint ?? rawCall.key_fingerprint,
+    connections: rawCall.connections,
+    startDate: rawCall.startDate ?? rawCall.start_date,
+    p2pAllowed: rawCall.p2pAllowed ?? rawCall.p2p_allowed,
+    reason: rawCall.reason,
+    duration: rawCall.duration,
+    needRating: rawCall.needRating ?? rawCall.need_rating,
+    needDebug: rawCall.needDebug ?? rawCall.need_debug,
+  };
+}
+
 export function buildPhoneCall(call: GramJs.TypePhoneCall): ApiPhoneCall {
-  const { id } = call;
+  const kind = getPhoneCallKind(call);
+  const fields = readPhoneCallFields(call);
 
   let phoneCall: ApiPhoneCall = {
-    id: id.toString(),
+    id: call.id.toString(),
   };
 
-  if (call instanceof GramJs.PhoneCallAccepted
-    || call instanceof GramJs.PhoneCallWaiting
-    || call instanceof GramJs.PhoneCall
-    || call instanceof GramJs.PhoneCallRequested) {
-    const {
-      accessHash, adminId, date, video, participantId, protocol,
-    } = call;
-
+  if (kind && kind !== 'discarded' && fields.accessHash != null && fields.adminId != null && fields.participantId != null) {
     phoneCall = {
       ...phoneCall,
-      accessHash: accessHash.toString(),
-      adminId: adminId.toString(),
-      participantId: participantId.toString(),
-      date,
-      isVideo: video,
-      protocol: buildApiCallProtocol(protocol),
+      accessHash: fields.accessHash.toString(),
+      adminId: fields.adminId.toString(),
+      participantId: fields.participantId.toString(),
+      date: fields.date as number | undefined,
+      isVideo: Boolean(fields.video),
+      protocol: fields.protocol ? buildApiCallProtocol(fields.protocol as GramJs.PhoneCallProtocol) : undefined,
     };
   }
 
-  if (call instanceof GramJs.PhoneCall) {
-    const {
-      p2pAllowed, gAOrB, keyFingerprint, connections, startDate,
-    } = call;
-
-    phoneCall = {
-      ...phoneCall,
-      state: 'active',
-      gAOrB: Array.from(gAOrB),
-      keyFingerprint: keyFingerprint.toString(),
-      startDate,
-      isP2pAllowed: Boolean(p2pAllowed),
-      connections: connections.map(buildApiCallConnection).filter(Boolean),
-    };
-  }
-
-  if (call instanceof GramJs.PhoneCallDiscarded) {
-    phoneCall = {
-      ...phoneCall,
-      state: 'discarded',
-      duration: call.duration,
-      reason: buildApiCallDiscardReason(call.reason),
-      needRating: call.needRating,
-      needDebug: call.needDebug,
-    };
-  }
-
-  if (call instanceof GramJs.PhoneCallWaiting) {
-    phoneCall = {
-      ...phoneCall,
-      state: 'waiting',
-      receiveDate: call.receiveDate,
-    };
-  }
-
-  if (call instanceof GramJs.PhoneCallAccepted) {
-    phoneCall = {
-      ...phoneCall,
-      state: 'accepted',
-      gB: Array.from(call.gB),
-    };
-  }
-
-  if (call instanceof GramJs.PhoneCallRequested) {
-    phoneCall = {
-      ...phoneCall,
-      state: 'requested',
-      gAHash: Array.from(call.gAHash),
-    };
+  switch (kind) {
+    case 'active': {
+      const gAOrB = bytesToNumberArray(fields.gAOrB as Buffer | Uint8Array | number[] | undefined);
+      phoneCall = {
+        ...phoneCall,
+        state: 'active',
+        gAOrB,
+        keyFingerprint: fields.keyFingerprint?.toString(),
+        startDate: fields.startDate as number | undefined,
+        isP2pAllowed: Boolean(fields.p2pAllowed),
+        connections: Array.isArray(fields.connections)
+          ? fields.connections.map(buildApiCallConnection).filter(Boolean)
+          : undefined,
+      };
+      break;
+    }
+    case 'discarded':
+      phoneCall = {
+        ...phoneCall,
+        state: 'discarded',
+        duration: fields.duration as number | undefined,
+        reason: buildApiCallDiscardReason(fields.reason as GramJs.TypePhoneCallDiscardReason | undefined),
+        needRating: Boolean(fields.needRating),
+        needDebug: Boolean(fields.needDebug),
+      };
+      break;
+    case 'waiting':
+      phoneCall = {
+        ...phoneCall,
+        state: 'waiting',
+        receiveDate: fields.receiveDate as number | undefined,
+      };
+      break;
+    case 'accepted': {
+      const gB = bytesToNumberArray(fields.gB as Buffer | Uint8Array | number[] | undefined);
+      phoneCall = {
+        ...phoneCall,
+        state: 'accepted',
+        gB,
+      };
+      break;
+    }
+    case 'requested': {
+      const gAHash = bytesToNumberArray(fields.gAHash as Buffer | Uint8Array | number[] | undefined);
+      phoneCall = {
+        ...phoneCall,
+        state: 'requested',
+        gAHash,
+      };
+      break;
+    }
+    default:
+      break;
   }
 
   return phoneCall;
@@ -219,16 +281,21 @@ function buildApiCallConnection(connection: GramJs.TypePhoneConnection): ApiPhon
 }
 
 export function buildApiCallProtocol(protocol: GramJs.PhoneCallProtocol): ApiCallProtocol {
-  const {
-    libraryVersions, minLayer, maxLayer, udpP2p, udpReflector,
-  } = protocol;
+  const rawProtocol = protocol as unknown as Record<string, unknown>;
+  const libraryVersions = protocol.libraryVersions
+    ?? (rawProtocol.LibraryVersions as string[] | undefined)
+    ?? [];
+  const minLayer = protocol.minLayer ?? (rawProtocol.MinLayer as number | undefined) ?? 65;
+  const maxLayer = protocol.maxLayer ?? (rawProtocol.MaxLayer as number | undefined) ?? 92;
+  const isUdpP2p = protocol.udpP2p ?? (rawProtocol.UdpP2p as boolean | undefined) ?? true;
+  const isUdpReflector = protocol.udpReflector ?? (rawProtocol.UdpReflector as boolean | undefined) ?? true;
 
   return {
     libraryVersions,
     minLayer,
     maxLayer,
-    isUdpP2p: udpP2p,
-    isUdpReflector: udpReflector,
+    isUdpP2p,
+    isUdpReflector,
   };
 }
 

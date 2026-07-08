@@ -18,6 +18,97 @@ import { updateGroupCall, updateGroupCallParticipant } from '../../reducers/call
 import { updateTabState } from '../../reducers/tabs';
 import { selectActiveGroupCall, selectGroupCallParticipant, selectPhoneCallUser } from '../../selectors/calls';
 
+const confirmedCallIds = new Set<string>();
+
+type PhoneCallState = NonNullable<ApiPhoneCall['state']>;
+
+const PHONE_CALL_STATE_RANK: Record<PhoneCallState, number> = {
+  requesting: 0,
+  requested: 1,
+  waiting: 2,
+  accepted: 3,
+  active: 4,
+  discarded: -1,
+};
+
+function isPhoneCallStateRegression(previousState?: PhoneCallState, nextState?: PhoneCallState) {
+  if (!previousState || !nextState) return false;
+
+  const previousRank = PHONE_CALL_STATE_RANK[previousState] ?? 0;
+  const nextRank = PHONE_CALL_STATE_RANK[nextState] ?? 0;
+
+  return nextRank < previousRank;
+}
+
+function mergePhoneCallUpdate(previousCall: ApiPhoneCall | undefined, nextCall: ApiPhoneCall): ApiPhoneCall {
+  const mergedCall: ApiPhoneCall = {
+    ...previousCall,
+    ...nextCall,
+  };
+
+  if (isPhoneCallStateRegression(previousCall?.state, nextCall.state)) {
+    return {
+      ...mergedCall,
+      state: previousCall!.state,
+      gB: previousCall?.gB ?? mergedCall.gB,
+      gAOrB: previousCall?.gAOrB ?? mergedCall.gAOrB,
+      connections: previousCall?.connections ?? mergedCall.connections,
+      protocol: previousCall?.protocol ?? mergedCall.protocol,
+      accessHash: nextCall.accessHash ?? previousCall?.accessHash ?? mergedCall.accessHash,
+    };
+  }
+
+  return mergedCall;
+}
+
+function shouldConfirmPhoneCall(call: ApiPhoneCall, currentUserId?: string) {
+  return Boolean(
+    call.state === 'accepted'
+    && call.accessHash
+    && call.gB?.length
+    && call.adminId === currentUserId
+    && !confirmedCallIds.has(call.id),
+  );
+}
+
+async function runPhoneCallConfirm(call: ApiPhoneCall) {
+  if (!call.gB?.length || confirmedCallIds.has(call.id)) {
+    return;
+  }
+
+  confirmedCallIds.add(call.id);
+
+  try {
+    const { gA, keyFingerprint, emojis } = await callApi('confirmPhoneCall', [call.gB, EMOJI_DATA, EMOJI_OFFSETS]);
+
+    let global = getGlobal();
+    global = {
+      ...global,
+      phoneCall: {
+        ...global.phoneCall,
+        emojis,
+      } as ApiPhoneCall,
+    };
+    setGlobal(global);
+
+    await callApi('confirmCall', {
+      call, gA, keyFingerprint,
+    });
+  } catch {
+    confirmedCallIds.delete(call.id);
+  }
+}
+
+export async function confirmAcceptedPhoneCallIfNeeded(global = getGlobal()) {
+  const { phoneCall, currentUserId } = global;
+
+  if (!shouldConfirmPhoneCall(phoneCall!, currentUserId)) {
+    return;
+  }
+
+  await runPhoneCallConfirm(phoneCall!);
+}
+
 addActionHandler('apiUpdate', (global, actions, update): ActionReturnType => {
   const { activeGroupCallId } = global.groupCalls;
 
@@ -78,12 +169,9 @@ addActionHandler('apiUpdate', (global, actions, update): ActionReturnType => {
       if (!ARE_CALLS_SUPPORTED) return undefined;
       const { phoneCall, currentUserId } = global;
 
-      const call: ApiPhoneCall = {
-        ...phoneCall,
-        ...update.call,
-      };
+      const call = mergePhoneCallUpdate(phoneCall, update.call);
 
-      const isOutgoing = phoneCall?.adminId === currentUserId;
+      const isOutgoing = call.adminId === currentUserId;
 
       global = {
         ...global,
@@ -119,6 +207,8 @@ addActionHandler('apiUpdate', (global, actions, update): ActionReturnType => {
       }
 
       if (state === 'discarded') {
+        confirmedCallIds.delete(call.id);
+
         // Discarded from other device
         if (!phoneCall) return undefined;
 
@@ -126,26 +216,8 @@ addActionHandler('apiUpdate', (global, actions, update): ActionReturnType => {
           ...(call.needRating && { ratingPhoneCall: call }),
           isCallPanelVisible: undefined,
         }, getCurrentTabId());
-      } else if (state === 'accepted' && accessHash && gB) {
-        (async () => {
-          const { gA, keyFingerprint, emojis } = await callApi('confirmPhoneCall', [gB, EMOJI_DATA, EMOJI_OFFSETS]);
-
-          global = getGlobal();
-          const newCall = {
-            ...global.phoneCall,
-            emojis,
-          } as ApiPhoneCall;
-
-          global = {
-            ...global,
-            phoneCall: newCall,
-          };
-          setGlobal(global);
-
-          callApi('confirmCall', {
-            call, gA, keyFingerprint,
-          });
-        })();
+      } else if (shouldConfirmPhoneCall(call, currentUserId)) {
+        void runPhoneCallConfirm(call);
       } else if (state === 'active' && connections && phoneCall?.state !== 'active') {
         if (!isOutgoing) {
           callApi('receivedCall', { call });
