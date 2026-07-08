@@ -283,18 +283,19 @@ addActionHandler('acceptCall', async (global): Promise<void> => {
 });
 
 addActionHandler('sendSignalingData', (global, actions, payload): ActionReturnType => {
-  const { phoneCall } = global;
-  if (!phoneCall) {
-    return;
-  }
-
   const data = JSON.stringify(payload);
 
   (async () => {
+    const { phoneCall } = getGlobal();
+    if (!phoneCall) {
+      logPhoneCallDebug('Skipping signaling send because phone call state is missing');
+      return;
+    }
+
     const encodedData = await callApi('encodePhoneCallData', [data]);
 
     if (!encodedData) {
-      logPhoneCallDebug('Failed to encode signaling data');
+      logPhoneCallDebug('Failed to encode signaling data', { callId: phoneCall.id });
       return;
     }
 

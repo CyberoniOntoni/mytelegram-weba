@@ -46,6 +46,50 @@ function randomTelegramSsrc() {
   return toTelegramSource(Math.floor(Math.random() * 0x7fffffff));
 }
 
+function extractMinimalP2pSdp(sdpString: string): P2pParsedSdp {
+  const ufrag = sdpString.match(/a=ice-ufrag:(\S+)/)?.[1];
+  const pwd = sdpString.match(/a=ice-pwd:(\S+)/)?.[1];
+  const fingerprintMatch = sdpString.match(/a=fingerprint:(\S+)\s+(\S+)/);
+  const setup = sdpString.match(/a=setup:(\S+)/)?.[1];
+
+  if (!ufrag || !pwd || !fingerprintMatch) {
+    throw new Error('Failed extracting ICE attributes from SDP');
+  }
+
+  return {
+    ufrag,
+    pwd,
+    fingerprints: [{
+      hash: fingerprintMatch[1],
+      fingerprint: fingerprintMatch[2],
+      setup: setup || 'actpass',
+    }],
+    'ssrc-groups': [],
+    audioExtmap: [],
+    videoExtmap: [],
+    screencastExtmap: [],
+    audioPayloadTypes: [],
+    videoPayloadTypes: [],
+    screencastPayloadTypes: [],
+  };
+}
+
+function parseLocalPhoneCallSdp(conn: RTCPeerConnection): P2pParsedSdp {
+  const localDescription = conn.localDescription;
+  if (!localDescription?.sdp) {
+    throw new Error('Missing local SDP');
+  }
+
+  try {
+    return parseSdp(localDescription, true) as P2pParsedSdp;
+  } catch (err) {
+    logPhoneCallDebug('Primary SDP parse failed, using minimal extraction', {
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return extractMinimalP2pSdp(localDescription.sdp);
+  }
+}
+
 function enrichParsedSdp(conn: RTCPeerConnection, sdp: P2pParsedSdp) {
   if (!sdp.ssrc) {
     const audioSender = conn.getSenders().find((sender) => sender.track?.kind === 'audio');
@@ -314,16 +358,22 @@ export async function joinPhoneCall(
   };
 
   try {
-    toggleStreamP2p('audio', true);
+    await toggleStreamP2p('audio', true);
   } catch (err) {
-    console.error(err)
+    logPhoneCallDebug('Failed to enable microphone for phone call', {
+      error: err instanceof Error ? err.message : String(err),
+    });
   }
 
   if (isOutgoing) {
-    await createOffer(conn, {
+    const offerCreated = await createOffer(conn, {
       offerToReceiveAudio: true,
       offerToReceiveVideo: true,
-    })
+    });
+
+    if (!offerCreated) {
+      throw new Error('Failed to create phone call offer');
+    }
   }
 }
 
@@ -503,7 +553,7 @@ export async function processSignalingMessage(message: P2pMessage) {
       if (!isOutgoing) {
         const answer = await connection.createAnswer();
         await connection.setLocalDescription(answer);
-        const sdp = parseSdp(connection.localDescription!, true) as P2pParsedSdp;
+        const sdp = parseLocalPhoneCallSdp(connection);
         enrichParsedSdp(connection, sdp);
         sendInitialSetup(sdp);
       }
@@ -537,16 +587,19 @@ async function tryAddCandidate(connection: RTCPeerConnection, candidate: string)
   }
 }
 
-async function createOffer(conn: RTCPeerConnection, params: RTCOfferOptions) {
+async function createOffer(conn: RTCPeerConnection, params: RTCOfferOptions): Promise<boolean> {
   try {
     const offer = await conn.createOffer(params);
     await conn.setLocalDescription(offer);
-    const sdp = parseSdp(conn.localDescription!, true) as P2pParsedSdp;
+    const sdp = parseLocalPhoneCallSdp(conn);
     enrichParsedSdp(conn, sdp);
     sendInitialSetup(sdp);
+    logPhoneCallDebug('Created phone call offer and sent initial setup');
+    return true;
   } catch (err) {
     logPhoneCallDebug('Failed to create offer', {
       error: err instanceof Error ? err.message : String(err),
     });
+    return false;
   }
 }

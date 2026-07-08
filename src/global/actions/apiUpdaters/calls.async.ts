@@ -158,9 +158,22 @@ async function runPhoneCallConfirm(call: ApiPhoneCall) {
     });
 
     if (activeCall && typeof activeCall === 'object' && 'state' in activeCall) {
-      const latestGlobal = getGlobal();
-      const isOutgoing = normalizeUserId(activeCall.adminId) === normalizeUserId(latestGlobal.currentUserId);
-      await startActivePhoneCallIfNeeded(activeCall, isOutgoing, getActions());
+      let latestGlobal = getGlobal();
+      if (latestGlobal.phoneCall?.id === activeCallId) {
+        const mergedCall = preservePhoneCallFields(latestGlobal.phoneCall, activeCall as ApiPhoneCall);
+        latestGlobal = {
+          ...latestGlobal,
+          phoneCall: mergedCall,
+        };
+        setGlobal(latestGlobal);
+      }
+
+      latestGlobal = getGlobal();
+      const mergedActiveCall = latestGlobal.phoneCall?.id === activeCallId
+        ? latestGlobal.phoneCall!
+        : (activeCall as ApiPhoneCall);
+      const isOutgoing = normalizeUserId(mergedActiveCall.adminId) === normalizeUserId(latestGlobal.currentUserId);
+      await startActivePhoneCallIfNeeded(mergedActiveCall, isOutgoing, getActions());
     }
   } catch (err) {
     confirmedCallIds.delete(call.id);
@@ -240,6 +253,11 @@ async function startActivePhoneCallIfNeeded(
     await startActivePhoneCall(call, isOutgoing, call.connections, actions);
   } catch (err) {
     startedCallIds.delete(call.id);
+    logPhoneCallDebug('Failed to start phone call media', {
+      callId: call.id,
+      isOutgoing,
+      error: err instanceof Error ? err.message : String(err),
+    });
     throw err;
   }
 }
@@ -319,9 +337,17 @@ async function startActivePhoneCall(
     setGlobal(global);
   }
 
-  const global = getGlobal();
+  let global = getGlobal();
   if (global.phoneCall?.id !== activeCallId) {
     return;
+  }
+
+  if (call.state === 'active' && global.phoneCall.state !== 'active') {
+    global = {
+      ...global,
+      phoneCall: preservePhoneCallFields(global.phoneCall, call),
+    };
+    setGlobal(global);
   }
 
   await joinPhoneCall(
