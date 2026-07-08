@@ -94,6 +94,10 @@ export default class PromisedWebSockets {
     });
     this.closed = false;
     this.website = this.getWebSocketLink(ip, port, isTestServer, isPremium);
+    if (process.env.FAMILYGRAM_SELF_HOSTED === '1') {
+      // eslint-disable-next-line no-console
+      console.info('[FamilyGram] WebSocket →', this.website);
+    }
     this.client = new WebSocket(this.website, 'binary');
     return new Promise((resolve, reject) => {
       if (!this.client) return;

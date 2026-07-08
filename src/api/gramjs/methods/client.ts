@@ -86,7 +86,16 @@ let client: TelegramClient;
 let currentUserId: string | undefined;
 
 export async function init(initialArgs: ApiInitialArgs, onConnected?: NoneToVoidFunction) {
-  if (DEBUG) {
+  if (client) {
+    try {
+      await destroy(true, true);
+    } catch {
+      // Ignore errors while tearing down a previous hung connection.
+    }
+  }
+
+  if (DEBUG || IS_FAMILYGRAM) {
+    GramJsLogger.setLevel('debug');
     // eslint-disable-next-line no-console
     console.log('>>> START INIT API');
   }

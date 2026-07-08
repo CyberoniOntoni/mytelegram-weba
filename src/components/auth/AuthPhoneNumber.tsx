@@ -70,6 +70,7 @@ const AuthPhoneNumber = ({
     loginWithPasskey,
     destroyConnection,
     initApi,
+    reset,
   } = getActions();
 
   const {
@@ -98,6 +99,7 @@ const AuthPhoneNumber = ({
   const [lastSelection, setLastSelection] = useState<[number, number] | undefined>();
   const [isLoading, markIsLoading, unmarkIsLoading] = useFlag();
   const [wsProbe, setWsProbe] = useState<FamilyGramWsProbeResult | 'pending'>('pending');
+  const [handshakeSlow, setHandshakeSlow] = useState(false);
 
   const accountsInfo = useMultiaccountInfo();
   const hasActiveAccount = Object.values(accountsInfo).length > 0;
@@ -141,14 +143,27 @@ const AuthPhoneNumber = ({
     if (!IS_FAMILYGRAM || isConnected) return undefined;
 
     let cancelled = false;
-    setWsProbe('pending');
-    void probeFamilyGramWebSocket().then((result) => {
-      if (!cancelled) setWsProbe(result);
-    });
+    const timer = setTimeout(() => {
+      setWsProbe('pending');
+      void probeFamilyGramWebSocket().then((result) => {
+        if (!cancelled) setWsProbe(result);
+      });
+    }, 8000);
 
     return () => {
       cancelled = true;
+      clearTimeout(timer);
     };
+  }, [IS_FAMILYGRAM, isConnected]);
+
+  useEffect(() => {
+    if (!IS_FAMILYGRAM || isConnected) {
+      setHandshakeSlow(false);
+      return undefined;
+    }
+
+    const timer = setTimeout(() => setHandshakeSlow(true), 20000);
+    return () => clearTimeout(timer);
   }, [IS_FAMILYGRAM, isConnected]);
 
   useEffect(() => {
@@ -302,20 +317,23 @@ const AuthPhoneNumber = ({
         {IS_FAMILYGRAM && !isConnected && (
           <p className="note">
             {connectionState === 'connectionStateBroken'
-              ? 'Cannot connect to the server. Clear site data, then reload. Ensure Testgram gateway, auth-server, and messenger-query-server are running.'
+              ? 'Cannot connect to the server. Clear site data, then reload. On the LXC run: node deploy/mtproto-handshake-probe.cjs'
               : wsProbe === 'failed'
                 ? `WebSocket to ${getFamilyGramWebSocketUrl() || 'server'} failed. Enable Websockets in NPM and proxy /apiws to gateway port 30444.`
-                : wsProbe === 'ok'
-                  ? 'WebSocket OK — completing MTProto handshake…'
-                  : 'Connecting to server…'}
+                : handshakeSlow && wsProbe === 'ok'
+                  ? 'WebSocket OK but login is still starting. Tap Retry below, or clear site data and reload.'
+                  : wsProbe === 'ok'
+                    ? 'WebSocket OK — completing MTProto handshake…'
+                    : 'Connecting to server…'}
           </p>
         )}
-        {IS_FAMILYGRAM && !isConnected && wsProbe === 'ok' && (
+        {IS_FAMILYGRAM && !isConnected && (handshakeSlow || connectionState === 'connectionStateBroken') && (
           <Button
             className="auth-button"
             isText
             onClick={() => {
               destroyConnection();
+              reset();
               initApi();
             }}
           >

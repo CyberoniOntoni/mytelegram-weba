@@ -50,7 +50,16 @@ if command -v docker >/dev/null 2>&1 && [ -d "$COMPOSE_DIR" ]; then
   done
 fi
 
-if command -v node >/dev/null 2>&1; then
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if command -v node >/dev/null 2>&1 && [ -f "${SCRIPT_DIR}/mtproto-handshake-probe.cjs" ]; then
+  echo "-- MTProto handshake probe (ReqPqMulti → ResPQ):"
+  if node "${SCRIPT_DIR}/mtproto-handshake-probe.cjs" "ws://${GATEWAY_HOST}:${GATEWAY_PORT}/apiws"; then
+    echo "OK: full MTProto auth path works"
+  else
+    echo "FAIL: WebSocket opens but auth-server did not answer — check auth-server, rabbitmq, redis"
+    exit 1
+  fi
+elif command -v node >/dev/null 2>&1; then
   echo "-- WebSocket probe (/apiws, subprotocol binary):"
   node -e "
     const { WebSocket } = require('ws');
@@ -59,7 +68,7 @@ if command -v node >/dev/null 2>&1; then
     const t = setTimeout(() => { ws.terminate(); console.log('FAIL: WebSocket timeout'); process.exit(1); }, 8000);
     ws.on('open', () => { clearTimeout(t); console.log('OK: WebSocket opened on', url); ws.close(); process.exit(0); });
     ws.on('error', (e) => { clearTimeout(t); console.log('FAIL:', e.message); process.exit(1); });
-  " 2>/dev/null || echo "    (install node package ws on the host to run WS probe, or use: npx wscat -c ws://127.0.0.1:${GATEWAY_PORT}/apiws -s binary)"
+  " 2>/dev/null || echo "    (npm install ws in deploy/ parent, or: npx wscat -c ws://127.0.0.1:${GATEWAY_PORT}/apiws -s binary)"
 fi
 
 echo ""
