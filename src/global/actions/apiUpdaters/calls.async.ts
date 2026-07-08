@@ -210,8 +210,8 @@ addActionHandler('apiUpdate', (global, actions, update): ActionReturnType => {
   return undefined;
 });
 
+const SUPPORTED_CALL_LIBRARY_VERSIONS = new Set(['4.0.0', '4.0.1', '2.7.7']);
+
 function verifyPhoneCallProtocol(protocol?: ApiCallProtocol) {
-  return protocol?.libraryVersions.some((version) => {
-    return version === '4.0.0' || version === '4.0.1';
-  });
+  return Boolean(protocol?.libraryVersions.some((version) => SUPPORTED_CALL_LIBRARY_VERSIONS.has(version)));
 }
