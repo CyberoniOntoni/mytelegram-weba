@@ -5,6 +5,7 @@ import { getActions, withGlobal } from '../../global';
 
 import type { GlobalState } from '../../global/types';
 
+import { IS_FAMILYGRAM } from '../../config';
 import { IS_TOUCH_ENV } from '../../util/browser/windowEnvironment';
 import { pick } from '../../util/iteratees';
 
@@ -20,7 +21,7 @@ type StateProps = {
   auth: GlobalState['auth'];
 };
 
-const CODE_LENGTH = 5;
+const DEFAULT_CODE_LENGTH = 5;
 
 const AuthCode = ({
   auth,
@@ -31,7 +32,10 @@ const AuthCode = ({
     clearAuthErrorKey,
   } = getActions();
 
-  const { phoneNumber, isCodeViaApp, isLoading, errorKey } = auth;
+  const {
+    phoneNumber, isCodeViaApp, isLoading, errorKey, codeLength: serverCodeLength,
+  } = auth;
+  const codeLength = serverCodeLength || DEFAULT_CODE_LENGTH;
 
   const lang = useLang();
   const inputRef = useRef<HTMLInputElement>();
@@ -57,7 +61,8 @@ const AuthCode = ({
     }
 
     const { currentTarget: target } = e;
-    target.value = target.value.replace(/[^\d]+/, '').substr(0, CODE_LENGTH);
+    const sanitizer = IS_FAMILYGRAM ? /[^\da-zA-Z]/g : /[^\d]/g;
+    target.value = target.value.replace(sanitizer, '').slice(0, codeLength);
 
     if (target.value === code) {
       return;
@@ -77,10 +82,10 @@ const AuthCode = ({
       setTrackingDirection(1);
     }
 
-    if (target.value.length === CODE_LENGTH) {
+    if (target.value.length === codeLength) {
       setAuthCode({ code: target.value });
     }
-  }, [errorKey, code, isTracking]);
+  }, [errorKey, code, isTracking, codeLength]);
 
   function handleReturnToAuthPhoneNumber() {
     returnToAuthPhoneNumber();
@@ -91,7 +96,7 @@ const AuthCode = ({
       <div className="auth-form">
         <TrackingMonkey
           code={code}
-          codeLength={CODE_LENGTH}
+          codeLength={codeLength}
           isTracking={isTracking}
           trackingDirection={trackingDirection}
         />

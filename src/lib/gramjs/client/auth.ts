@@ -21,7 +21,7 @@ export interface UserAuthParams {
   phoneNumber: string | (() => Promise<string>);
   webAuthTokenFailed: () => void;
   onPasskeyOption: (passkeyOption: ApiPasskeyOption) => void;
-  phoneCode: (isCodeViaApp?: boolean) => Promise<string>;
+  phoneCode: (isCodeViaApp?: boolean, codeLength?: number) => Promise<string>;
   password: (hint?: string, noReset?: boolean) => Promise<string>;
   firstAndLastNames: () => Promise<[string, string?]>;
   qrCode: (qrCode: { token: Buffer; expires: number }) => Promise<void>;
@@ -142,6 +142,7 @@ async function signInUser(
   let phoneNumber;
   let phoneCodeHash;
   let isCodeViaApp;
+  let codeLength = 5;
   lastUsedMethod = 'phoneNumber';
 
   while (true) {
@@ -166,6 +167,7 @@ async function signInUser(
       const sendCodeResult = await sendCode(client, apiCredentials, phoneNumber, authParams.forceSMS);
       phoneCodeHash = sendCodeResult.phoneCodeHash;
       isCodeViaApp = sendCodeResult.isCodeViaApp;
+      codeLength = sendCodeResult.codeLength;
 
       if (typeof phoneCodeHash !== 'string') {
         throw new Error('Failed to retrieve phone code hash');
@@ -189,7 +191,7 @@ async function signInUser(
   while (1) {
     try {
       try {
-        phoneCode = await authParams.phoneCode(isCodeViaApp);
+        phoneCode = await authParams.phoneCode(isCodeViaApp, codeLength);
       } catch (err: unknown) {
         // This is the support for changing phone number from the phone code screen.
         if (err instanceof Error && err.message === 'RESTART_AUTH') {
@@ -450,11 +452,20 @@ export async function signInUserWithPasskey(
   }
 }
 
+function getSentCodeLength(type: Api.auth.TypeSentCodeType): number {
+  if ('length' in type && typeof type.length === 'number') {
+    return type.length;
+  }
+
+  return 5;
+}
+
 async function sendCode(
   client: TelegramClient, apiCredentials: ApiCredentials, phoneNumber: string, forceSMS = false,
 ): Promise<{
   phoneCodeHash: string;
   isCodeViaApp: boolean;
+  codeLength: number;
 }> {
   try {
     const { apiId, apiHash } = apiCredentials;
@@ -474,6 +485,7 @@ async function sendCode(
       return {
         phoneCodeHash: sendResult.phoneCodeHash,
         isCodeViaApp: sendResult.type instanceof Api.auth.SentCodeTypeApp,
+        codeLength: getSentCodeLength(sendResult.type),
       };
     }
 
@@ -489,6 +501,7 @@ async function sendCode(
     return {
       phoneCodeHash: resendResult.phoneCodeHash,
       isCodeViaApp: resendResult.type instanceof Api.auth.SentCodeTypeApp,
+      codeLength: getSentCodeLength(resendResult.type),
     };
   } catch (err: unknown) {
     if (err instanceof RPCError && err.errorMessage === 'AUTH_RESTART') {

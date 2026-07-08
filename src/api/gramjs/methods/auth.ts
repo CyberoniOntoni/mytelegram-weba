@@ -38,10 +38,11 @@ export function onRequestPhoneNumber() {
   });
 }
 
-export function onRequestCode(isCodeViaApp = false) {
+export function onRequestCode(isCodeViaApp = false, codeLength = 5) {
   sendApiUpdate({
     ...buildAuthStateUpdate('authorizationStateWaitCode'),
     isCodeViaApp,
+    codeLength,
   });
 
   return new Promise<string>((resolve, reject) => {

@@ -150,6 +150,7 @@ function onUpdateAuthorizationState<T extends GlobalState>(global: T, update: Ap
     case 'authorizationStateWaitCode':
       global = updateAuth(global, {
         isCodeViaApp: update.isCodeViaApp,
+        codeLength: update.codeLength,
       });
       setGlobal(global);
       break;
