@@ -7,6 +7,7 @@ import type { OriginPayload, ThenArg, WorkerMessageEvent } from './types';
 
 import { DEBUG, IGNORE_UNHANDLED_ERRORS } from '../../../config';
 import { IS_TAURI } from '../../../util/browser/globalEnvironment';
+import type { DebugLevel } from '../../../util/debugConsole';
 import { logDebugMessage } from '../../../util/debugConsole';
 import Deferred from '../../../util/Deferred';
 import { getCurrentTabId, subscribeToMasterChange } from '../../../util/establishMultitabRole';
@@ -277,7 +278,15 @@ export function cancelApiProgressMaster(messageId: string) {
 
 function subscribeToWorker(onUpdate: OnApiUpdate) {
   worker?.addEventListener('message', ({ data }: WorkerMessageEvent) => {
-    data?.payloads.forEach((payload) => {
+    if (!data?.payloads) {
+      const legacy = data as { type?: string; level?: DebugLevel; args?: any[] } | undefined;
+      if (legacy?.type === 'debugLog' && legacy.level && legacy.args) {
+        logDebugMessage(legacy.level, ...legacy.args);
+      }
+      return;
+    }
+
+    data.payloads.forEach((payload) => {
       if (payload.type === 'updates') {
         let DEBUG_startAt: number | undefined;
         if (DEBUG) {
