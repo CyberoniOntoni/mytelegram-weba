@@ -68,7 +68,7 @@ export async function doAuthentication(sender: MTProtoPlainSender, log: any) {
   let targetFingerprint;
   let targetKey;
   for (const fingerprint of resPQ.serverPublicKeyFingerprints) {
-    targetKey = SERVER_KEYS.get(fingerprint);
+    targetKey = SERVER_KEYS.get(fingerprint.toString());
     if (targetKey !== undefined) {
       targetFingerprint = fingerprint;
       break;
@@ -96,11 +96,12 @@ export async function doAuthentication(sender: MTProtoPlainSender, log: any) {
 
     const keyAesEncrypted = Buffer.concat([tempKeyXor, aesEncrypted]);
     const keyAesEncryptedInt = readBigIntFromBuffer(keyAesEncrypted, false, false);
-    if (keyAesEncryptedInt >= targetKey.n) {
+    const rsaModulus = BigInt(targetKey.n.toString());
+    if (keyAesEncryptedInt >= rsaModulus) {
       log.debug('Aes key greater than RSA. retrying');
       continue;
     }
-    const encryptedDataBuffer = modExp(keyAesEncryptedInt, BigInt(targetKey.e), targetKey.n);
+    const encryptedDataBuffer = modExp(keyAesEncryptedInt, BigInt(targetKey.e), rsaModulus);
     encryptedData = readBufferFromBigInt(encryptedDataBuffer, 256, false, false);
 
     break;

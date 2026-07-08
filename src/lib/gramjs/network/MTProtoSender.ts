@@ -323,7 +323,7 @@ export default class MTProtoSender {
         }
         this._log.error(`${this._isFallback ? 'HTTP' : 'WebSocket'} connection failed attempt: ${attempt + 1}`);
         // eslint-disable-next-line no-console
-        console.error(err);
+        console.error(err instanceof Error ? err.message : err, err);
         await sleep(this._delay);
       }
     }
