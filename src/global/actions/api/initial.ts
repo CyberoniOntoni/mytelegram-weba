@@ -106,7 +106,7 @@ addActionHandler('initApi', (global, actions): ActionReturnType => {
     webTransportPort: familyGramWebTransport?.port,
   });
 
-  void setShouldEnableDebugLog(IS_FAMILYGRAM || Boolean(shouldCollectDebugLogs));
+  void setShouldEnableDebugLog(Boolean(shouldCollectDebugLogs));
 });
 
 addActionHandler('setAuthPhoneNumber', (global, actions, payload): ActionReturnType => {

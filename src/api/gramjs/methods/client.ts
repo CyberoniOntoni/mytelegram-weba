@@ -94,7 +94,7 @@ export async function init(initialArgs: ApiInitialArgs, onConnected?: NoneToVoid
     }
   }
 
-  if (DEBUG || IS_FAMILYGRAM) {
+  if (DEBUG) {
     GramJsLogger.setLevel('debug');
     // eslint-disable-next-line no-console
     console.log('>>> START INIT API');
@@ -128,7 +128,7 @@ export async function init(initialArgs: ApiInitialArgs, onConnected?: NoneToVoid
       systemVersion: platform || DEFAULT_PLATFORM,
       appVersion: `${APP_VERSION} ${APP_CODE_NAME}`,
       useWSS: IS_FAMILYGRAM,
-      additionalDcsDisabled: IS_TEST,
+      additionalDcsDisabled: IS_TEST || IS_FAMILYGRAM,
       shouldDebugExportedSenders,
       shouldForceHttpTransport,
       shouldAllowHttpTransport: IS_FAMILYGRAM ? false : shouldAllowHttpTransport,
