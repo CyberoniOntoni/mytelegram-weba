@@ -416,7 +416,7 @@ export async function confirmCall({
     call,
   });
 
-  return true;
+  return call;
 }
 
 export function sendSignalingData({

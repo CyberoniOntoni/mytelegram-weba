@@ -298,7 +298,15 @@ addActionHandler('sendSignalingData', (global, actions, payload): ActionReturnTy
       return;
     }
 
-    callApi('sendSignalingData', { data: encodedData, call: phoneCall });
+    const sent = await callApi('sendSignalingData', { data: encodedData, call: phoneCall });
+    if (!sent) {
+      logPhoneCallDebug('Failed to send signaling data to server', { callId: phoneCall.id });
+    } else {
+      logPhoneCallDebug('Sent signaling data to server', {
+        callId: phoneCall.id,
+        bytes: encodedData.length,
+      });
+    }
   })();
 });
 

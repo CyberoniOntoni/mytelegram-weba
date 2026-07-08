@@ -161,7 +161,7 @@ function readPhoneCallFields(call: GramJs.TypePhoneCall) {
     gAHash: rawCall.gAHash ?? rawCall.g_a_hash,
     gAOrB: rawCall.gAOrB ?? rawCall.g_a_or_b,
     keyFingerprint: rawCall.keyFingerprint ?? rawCall.key_fingerprint,
-    connections: rawCall.connections,
+    connections: rawCall.connections ?? rawCall.Connections,
     startDate: rawCall.startDate ?? rawCall.start_date,
     p2pAllowed: rawCall.p2pAllowed ?? rawCall.p2p_allowed,
     reason: rawCall.reason,
@@ -261,31 +261,61 @@ export function buildApiCallDiscardReason(discardReason?: GramJs.TypePhoneCallDi
   }
 }
 
-function buildApiCallConnection(connection: GramJs.TypePhoneConnection): ApiPhoneCallConnection | undefined {
-  if (connection instanceof GramJs.PhoneConnectionWebrtc) {
-    const {
-      username, password, turn, stun, ip, ipv6, port,
-    } = connection;
+const PHONE_CONNECTION_WEBRTC_ID = 0x635fe375;
 
-    return {
-      username,
-      password,
-      isTurn: turn,
-      isStun: stun,
-      ip,
-      ipv6,
-      port,
-    };
-  } else {
+function buildApiCallConnection(connection: GramJs.TypePhoneConnection): ApiPhoneCallConnection | undefined {
+  const rawConnection = connection as unknown as Record<string, unknown>;
+  const isWebRtcConnection = connection instanceof GramJs.PhoneConnectionWebrtc
+    || rawConnection.CONSTRUCTOR_ID === PHONE_CONNECTION_WEBRTC_ID
+    || rawConnection.className === 'phoneConnectionWebrtc'
+    || rawConnection.className === 'PhoneConnectionWebrtc'
+    || ('ip' in rawConnection && ('turn' in rawConnection || 'stun' in rawConnection));
+
+  if (!isWebRtcConnection) {
     return undefined;
   }
+
+  const typedConnection = connection as GramJs.PhoneConnectionWebrtc;
+  const username = typedConnection.username ?? (rawConnection.username as string | undefined) ?? '';
+  const password = typedConnection.password ?? (rawConnection.password as string | undefined) ?? '';
+  const ip = typedConnection.ip ?? (rawConnection.ip as string | undefined) ?? '';
+  const ipv6 = typedConnection.ipv6 ?? (rawConnection.ipv6 as string | undefined) ?? '';
+  const port = typedConnection.port ?? (rawConnection.port as number | undefined) ?? 0;
+  const isTurn = typedConnection.turn ?? Boolean(rawConnection.turn);
+  const isStun = typedConnection.stun ?? Boolean(rawConnection.stun);
+
+  if (!ip || !port) {
+    return undefined;
+  }
+
+  return {
+    username,
+    password,
+    isTurn,
+    isStun,
+    ip,
+    ipv6,
+    port,
+  };
+}
+
+function normalizeLibraryVersions(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.filter((version): version is string => typeof version === 'string');
+  }
+
+  if (value && typeof value === 'object' && 'length' in value) {
+    return Array.from(value as ArrayLike<string>).filter((version) => typeof version === 'string');
+  }
+
+  return [];
 }
 
 export function buildApiCallProtocol(protocol: GramJs.PhoneCallProtocol): ApiCallProtocol {
   const rawProtocol = protocol as unknown as Record<string, unknown>;
-  const libraryVersions = protocol.libraryVersions
-    ?? (rawProtocol.LibraryVersions as string[] | undefined)
-    ?? [];
+  const libraryVersions = normalizeLibraryVersions(
+    protocol.libraryVersions ?? rawProtocol.LibraryVersions,
+  );
   const minLayer = protocol.minLayer ?? (rawProtocol.MinLayer as number | undefined) ?? 65;
   const maxLayer = protocol.maxLayer ?? (rawProtocol.MaxLayer as number | undefined) ?? 92;
   const isUdpP2p = protocol.udpP2p ?? (rawProtocol.UdpP2p as boolean | undefined) ?? true;

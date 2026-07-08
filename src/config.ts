@@ -28,7 +28,7 @@ export const IS_BETA = process.env.APP_ENV === 'staging';
 export const PAID_MESSAGES_PURPOSE = 'paid_messages';
 
 export const DEBUG = process.env.APP_ENV !== 'production';
-export const DEBUG_CALLS = DEBUG;
+export const DEBUG_CALLS = DEBUG || IS_FAMILYGRAM;
 export const CALL_PROTOCOL_LIBRARY_VERSIONS = ['4.0.0', '4.0.1', '2.7.7'];
 export const DEBUG_MORE = false;
 export const DEBUG_LOG_FILENAME = 'tt-log.json';
@@ -370,7 +370,9 @@ export const MAX_MEDIA_FILES_FOR_ALBUM = 10;
 export const MAX_ACTIVE_PINNED_CHATS = 5;
 export const SCHEDULED_WHEN_ONLINE = 0x7FFFFFFE;
 export const LANG_PACKS = ['android', 'ios', 'tdesktop', 'macos'] as const;
-export const FEEDBACK_URL = 'https://bugs.telegram.org/?tag_ids=41&sort=time';
+export const FEEDBACK_URL = IS_FAMILYGRAM
+  ? 'https://github.com/CyberoniOntoni/mytelegram-weba/issues'
+  : 'https://bugs.telegram.org/?tag_ids=41&sort=time';
 export const FAQ_URL = 'https://telegram.org/faq';
 export const PRIVACY_URL = 'https://telegram.org/privacy';
 export const MINI_APP_TOS_URL = 'https://telegram.org/tos/mini-apps';

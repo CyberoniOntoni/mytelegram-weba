@@ -56,12 +56,10 @@ function enrichParsedSdp(conn: RTCPeerConnection, sdp: P2pParsedSdp) {
   if (!sdp['ssrc-groups']?.[0]?.sources?.length) {
     const videoSender = conn.getSenders().find((sender) => sender.track?.kind === 'video');
     const senderSsrc = videoSender?.getParameters().encodings?.[0]?.ssrc;
-    if (senderSsrc) {
-      sdp['ssrc-groups'] = [{
-        semantics: 'FID',
-        sources: [toTelegramSource(senderSsrc)],
-      }];
-    }
+    sdp['ssrc-groups'] = [{
+      semantics: 'FID',
+      sources: [senderSsrc ? toTelegramSource(senderSsrc) : randomTelegramSsrc()],
+    }];
   }
 }
 
@@ -370,10 +368,14 @@ function sendInitialSetup(sdp: P2pParsedSdp) {
   if (!state) return;
   const { emitSignalingData } = state;
 
-  const videoGroup = sdp['ssrc-groups']?.[0];
+  let videoGroup = sdp['ssrc-groups']?.[0];
   if (!videoGroup?.sources?.length) {
-    logPhoneCallDebug('Missing video SSRC group in local SDP');
-    return;
+    logPhoneCallDebug('Missing video SSRC group in local SDP, using random fallback');
+    videoGroup = {
+      semantics: 'FID',
+      sources: [randomTelegramSsrc()],
+    };
+    sdp['ssrc-groups'] = [videoGroup];
   }
 
   const audioSsrc = sdp.ssrc ?? randomTelegramSsrc();

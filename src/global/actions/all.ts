@@ -30,6 +30,7 @@ import './ui/users';
 import './ui/settings';
 import './ui/misc';
 import './ui/payments';
+import './calls';
 import './ui/calls';
 import './ui/mediaViewer';
 import './ui/passcode';

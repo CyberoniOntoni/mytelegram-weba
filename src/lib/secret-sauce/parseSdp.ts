@@ -61,7 +61,7 @@ export default (sessionDescription: RTCSessionDescriptionInit, isP2p = false): J
   const videoGroup = videoSection ? buildSsrcGroup(videoSection) : undefined;
   const screencastGroup = screencastSection ? buildSsrcGroup(screencastSection) : videoGroup;
 
-  if (!videoGroup?.sources?.length) {
+  if (!videoGroup?.sources?.length && !isP2p) {
     throw Error('Failed parsing SDP: no video ssrc');
   }
 
@@ -74,9 +74,9 @@ export default (sessionDescription: RTCSessionDescriptionInit, isP2p = false): J
     ufrag,
     ...(audioSsrc && { ssrc: toTelegramSource(audioSsrc) }),
     'ssrc-groups': [
-      videoGroup,
-      ...(isP2p && screencastGroup ? [screencastGroup] : []),
-    ].filter(Boolean) as SsrcGroup[],
+      ...(videoGroup ? [videoGroup] : []),
+      ...(isP2p && screencastGroup && screencastGroup !== videoGroup ? [screencastGroup] : []),
+    ] as SsrcGroup[],
     ...(isP2p && audioSection && videoSection && screencastSection && {
       audioExtmap: parseExtmaps(audioSection),
       videoExtmap: parseExtmaps(videoSection),

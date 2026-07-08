@@ -15,12 +15,13 @@ import { omit } from '../../../util/iteratees';
 import * as langProvider from '../../../util/oldLangProvider';
 import { EMOJI_DATA, EMOJI_OFFSETS } from '../../../util/phoneCallEmojiConstants';
 import { callApi } from '../../../api/gramjs';
-import { addActionHandler, getGlobal, setGlobal } from '../../index';
+import { addActionHandler, getActions, getGlobal, setGlobal } from '../../index';
 import { updateGroupCall, updateGroupCallParticipant } from '../../reducers/calls';
 import { updateTabState } from '../../reducers/tabs';
 import { selectActiveGroupCall, selectGroupCallParticipant, selectPhoneCallUser } from '../../selectors/calls';
 
 const confirmedCallIds = new Set<string>();
+const startedCallIds = new Set<string>();
 let phoneCallSignalingDataPromise = Promise.resolve();
 
 type PhoneCallState = NonNullable<ApiPhoneCall['state']>;
@@ -152,9 +153,15 @@ async function runPhoneCallConfirm(call: ApiPhoneCall) {
     };
     setGlobal(global);
 
-    await callApi('confirmCall', {
+    const activeCall = await callApi('confirmCall', {
       call, gA, keyFingerprint,
     });
+
+    if (activeCall && typeof activeCall === 'object' && 'state' in activeCall) {
+      const latestGlobal = getGlobal();
+      const isOutgoing = normalizeUserId(activeCall.adminId) === normalizeUserId(latestGlobal.currentUserId);
+      await startActivePhoneCallIfNeeded(activeCall, isOutgoing, getActions());
+    }
   } catch (err) {
     confirmedCallIds.delete(call.id);
     logPhoneCallDebug('Failed to confirm accepted phone call', {
@@ -206,6 +213,37 @@ async function processPhoneCallSignalingData(queued: QueuedPhoneCallSignalingDat
   }
 }
 
+async function startActivePhoneCallIfNeeded(
+  call: ApiPhoneCall,
+  isOutgoing: boolean,
+  actions: {
+    sendSignalingData: (...args: any[]) => void;
+    apiUpdate: (...args: any[]) => void;
+  },
+) {
+  if (startedCallIds.has(call.id)) {
+    return;
+  }
+
+  if (call.state !== 'active' || !call.connections?.length) {
+    logPhoneCallDebug('Skipping phone call media start', {
+      callId: call.id,
+      state: call.state,
+      connections: call.connections?.length ?? 0,
+    });
+    return;
+  }
+
+  startedCallIds.add(call.id);
+
+  try {
+    await startActivePhoneCall(call, isOutgoing, call.connections, actions);
+  } catch (err) {
+    startedCallIds.delete(call.id);
+    throw err;
+  }
+}
+
 async function startActivePhoneCall(
   call: ApiPhoneCall,
   isOutgoing: boolean,
@@ -216,6 +254,12 @@ async function startActivePhoneCall(
   },
 ) {
   const activeCallId = call.id;
+
+  logPhoneCallDebug('Starting phone call media', {
+    callId: activeCallId,
+    isOutgoing,
+    connections: connections.length,
+  });
 
   if (isOutgoing) {
     if (!call.keyFingerprint) {
@@ -389,6 +433,7 @@ addActionHandler('apiUpdate', (global, actions, update): ActionReturnType => {
 
       if (state === 'discarded') {
         confirmedCallIds.delete(call.id);
+        startedCallIds.delete(call.id);
 
         // Discarded from other device
         if (!phoneCall) return undefined;
@@ -399,10 +444,10 @@ addActionHandler('apiUpdate', (global, actions, update): ActionReturnType => {
         }, getCurrentTabId());
       } else if (shouldConfirmPhoneCall(call, currentUserId)) {
         void runPhoneCallConfirm(call);
-      } else if (state === 'active' && connections && phoneCall?.state !== 'active') {
+      } else if (state === 'active' && connections?.length && phoneCall?.state !== 'active') {
         void (async () => {
           try {
-            await startActivePhoneCall(call, isOutgoing, connections, actions);
+            await startActivePhoneCallIfNeeded(call, isOutgoing, actions);
           } catch (err) {
             logPhoneCallDebug('Failed to start phone call', {
               callId: call.id,
