@@ -18,6 +18,10 @@ import {
 import { sendApiUpdate } from '../updates/apiUpdateEmitter';
 import { invokeRequest, invokeRequestBeacon } from './client';
 
+const DH_RANDOM_LENGTH = 256;
+
+let cachedDhConfig: { g: number; p: number[]; version: number } | undefined;
+
 export async function getGroupCall({
   call,
 }: {
@@ -243,15 +247,33 @@ export function leaveGroupCallPresentation({
 
 export async function getDhConfig() {
   const dhConfig = await invokeRequest(new GramJs.messages.GetDhConfig({
-    version: DEFAULT_PRIMITIVES.INT,
-    randomLength: DEFAULT_PRIMITIVES.INT,
+    version: cachedDhConfig?.version ?? 0,
+    randomLength: DH_RANDOM_LENGTH,
   }));
 
-  if (!dhConfig || dhConfig instanceof GramJs.messages.DhConfigNotModified) return undefined;
+  if (!dhConfig) return undefined;
 
-  return {
+  if (dhConfig instanceof GramJs.messages.DhConfigNotModified) {
+    if (!cachedDhConfig) return undefined;
+
+    return {
+      g: cachedDhConfig.g,
+      p: cachedDhConfig.p,
+      random: Array.from(dhConfig.random),
+    };
+  }
+
+  if (!(dhConfig instanceof GramJs.messages.DhConfig)) return undefined;
+
+  cachedDhConfig = {
     g: dhConfig.g,
     p: Array.from(dhConfig.p),
+    version: dhConfig.version,
+  };
+
+  return {
+    g: cachedDhConfig.g,
+    p: cachedDhConfig.p,
     random: Array.from(dhConfig.random),
   };
 }
