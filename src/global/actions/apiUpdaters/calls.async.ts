@@ -1,6 +1,5 @@
 import type { ApiPhoneCall } from '../../../api/types';
 import type { ApiCallProtocol } from '../../../lib/secret-sauce';
-import type { P2pMessage } from '../../../lib/secret-sauce/p2pMessage';
 import type { ActionReturnType } from '../../types';
 
 import { CALL_PROTOCOL_LIBRARY_VERSIONS } from '../../../config';
@@ -75,6 +74,7 @@ function preservePhoneCallFields(
     gB: call.gB ?? previousCall?.gB,
     connections: call.connections ?? previousCall?.connections,
     protocol: call.protocol ?? previousCall?.protocol,
+    accessHash: call.accessHash ?? previousCall?.accessHash,
   };
 }
 
@@ -131,62 +131,6 @@ function shouldConfirmPhoneCall(call: ApiPhoneCall, currentUserId?: string) {
   );
 }
 
-function createSignalingDataEmitter(call: ApiPhoneCall) {
-  return (payload: P2pMessage) => {
-    if (!call.id || !call.accessHash) {
-      logPhoneCallDebug('Skipping signaling send, call snapshot incomplete', {
-        callId: call.id,
-        hasAccessHash: Boolean(call.accessHash),
-      });
-      return;
-    }
-
-    const data = JSON.stringify(payload);
-
-    void (async () => {
-      try {
-        const encodedData = await callApi('encodePhoneCallData', [data]);
-        if (!encodedData) {
-          logPhoneCallDebug('Failed to encode signaling data', { callId: call.id });
-          return;
-        }
-
-        const sent = await callApi('sendSignalingData', { data: encodedData, call });
-        if (!sent) {
-          logPhoneCallDebug('Failed to send signaling data to server', { callId: call.id });
-        } else {
-          logPhoneCallDebug('Sent signaling data to server', {
-            callId: call.id,
-            bytes: encodedData.length,
-            type: payload['@type'],
-          });
-        }
-      } catch (err) {
-        logPhoneCallDebug('Failed to send signaling data', {
-          callId: call.id,
-          type: payload['@type'],
-          error: err instanceof Error ? err.message : String(err),
-        });
-      }
-    })();
-  };
-}
-
-function syncGlobalPhoneCall(call: ApiPhoneCall) {
-  let global = getGlobal();
-  if (!global.phoneCall) {
-    return global;
-  }
-
-  global = {
-    ...global,
-    phoneCall: preservePhoneCallFields(global.phoneCall, call),
-  };
-  setGlobal(global);
-
-  return getGlobal();
-}
-
 async function runPhoneCallConfirm(call: ApiPhoneCall) {
   if (!call.gB?.length || confirmedCallIds.has(call.id)) {
     return;
@@ -196,8 +140,6 @@ async function runPhoneCallConfirm(call: ApiPhoneCall) {
   const activeCallId = call.id;
 
   try {
-    syncGlobalPhoneCall(call);
-
     const result = await callApi('confirmPhoneCall', [call.gB, EMOJI_DATA, EMOJI_OFFSETS]);
     if (!result) {
       logPhoneCallDebug('Failed to confirm accepted phone call', { callId: activeCallId });
@@ -208,40 +150,31 @@ async function runPhoneCallConfirm(call: ApiPhoneCall) {
     const { gA, keyFingerprint, emojis } = result;
 
     let global = getGlobal();
-    if (!global.phoneCall?.id || global.phoneCall.id !== activeCallId) {
-      global = syncGlobalPhoneCall(call);
-    }
-
     if (global.phoneCall?.id !== activeCallId) {
       confirmedCallIds.delete(call.id);
-      logPhoneCallDebug('Phone call state missing during confirm', { callId: activeCallId });
       return;
     }
 
     global = {
       ...global,
-      phoneCall: {
-        ...global.phoneCall,
+      phoneCall: preservePhoneCallFields(global.phoneCall, {
+        ...global.phoneCall!,
         emojis,
-      } as ApiPhoneCall,
+      }),
     };
     setGlobal(global);
 
-    const confirmCallPayload = preservePhoneCallFields(global.phoneCall, call);
     const activeCall = await callApi('confirmCall', {
-      call: confirmCallPayload, gA, keyFingerprint,
+      call: preservePhoneCallFields(global.phoneCall, call),
+      gA,
+      keyFingerprint,
     });
 
     if (activeCall && typeof activeCall === 'object' && 'state' in activeCall) {
-      const callForMedia = preservePhoneCallFields(confirmCallPayload, {
-        ...(activeCall as ApiPhoneCall),
-        keyFingerprint: (activeCall as ApiPhoneCall).keyFingerprint ?? keyFingerprint,
-      });
-      syncGlobalPhoneCall(callForMedia);
-
       const latestGlobal = getGlobal();
-      const isOutgoing = normalizeUserId(callForMedia.adminId) === normalizeUserId(latestGlobal.currentUserId);
-      await startActivePhoneCallIfNeeded(callForMedia, isOutgoing, getActions());
+      const isOutgoing = normalizeUserId((activeCall as ApiPhoneCall).adminId)
+        === normalizeUserId(latestGlobal.currentUserId);
+      await startActivePhoneCallIfNeeded(activeCall as ApiPhoneCall, isOutgoing, getActions());
     }
   } catch (err) {
     confirmedCallIds.delete(call.id);
@@ -313,6 +246,7 @@ async function startActivePhoneCallIfNeeded(
       isOutgoing,
       state: call.state,
       connections: call.connections?.length ?? 0,
+      hasAccessHash: Boolean(call.accessHash),
     });
     return;
   }
@@ -320,7 +254,7 @@ async function startActivePhoneCallIfNeeded(
   startedMediaKeys.add(mediaStartKey);
 
   try {
-    await startActivePhoneCall(call, isOutgoing, call.connections, actions, mediaStartKey);
+    await startActivePhoneCall(call, isOutgoing, call.connections, actions);
   } catch (err) {
     startedMediaKeys.delete(mediaStartKey);
     throw err;
@@ -335,7 +269,6 @@ async function startActivePhoneCall(
     sendSignalingData: (...args: any[]) => void;
     apiUpdate: (...args: any[]) => void;
   },
-  mediaStartKey: string,
 ) {
   const activeCallId = call.id;
 
@@ -343,6 +276,7 @@ async function startActivePhoneCall(
     callId: activeCallId,
     isOutgoing,
     connections: connections.length,
+    hasAccessHash: Boolean(call.accessHash),
   });
 
   if (isOutgoing) {
@@ -356,7 +290,6 @@ async function startActivePhoneCall(
 
     let global = getGlobal();
     if (global.phoneCall?.id !== activeCallId) {
-      startedMediaKeys.delete(mediaStartKey);
       return;
     }
 
@@ -384,7 +317,6 @@ async function startActivePhoneCall(
 
     if (!result) {
       logPhoneCallDebug('Failed to confirm phone call', { callId: activeCallId });
-      startedMediaKeys.delete(mediaStartKey);
       return;
     }
 
@@ -392,37 +324,36 @@ async function startActivePhoneCall(
 
     global = getGlobal();
     if (global.phoneCall?.id !== activeCallId) {
-      startedMediaKeys.delete(mediaStartKey);
       return;
     }
 
     global = {
       ...global,
-      phoneCall: {
-        ...global.phoneCall,
+      phoneCall: preservePhoneCallFields(global.phoneCall, {
+        ...global.phoneCall!,
         emojis,
-      } as ApiPhoneCall,
+      }),
     };
     setGlobal(global);
   }
 
   let global = getGlobal();
-  if (!global.phoneCall?.id || global.phoneCall.id !== activeCallId) {
-    global = syncGlobalPhoneCall(call);
-  }
+  const callForSignaling = preservePhoneCallFields(global.phoneCall, call);
 
-  if (global.phoneCall?.id !== activeCallId) {
-    logPhoneCallDebug('Phone call state missing before media start', { callId: activeCallId });
-    startedMediaKeys.delete(mediaStartKey);
+  if (!callForSignaling.accessHash) {
+    logPhoneCallDebug('Cannot start phone call media without access hash', { callId: activeCallId });
     return;
   }
 
-  const signalingCall = preservePhoneCallFields(global.phoneCall, call);
-  const emitSignalingData = createSignalingDataEmitter(signalingCall);
+  global = {
+    ...global,
+    phoneCall: callForSignaling,
+  };
+  setGlobal(global);
 
   await joinPhoneCall(
     connections,
-    emitSignalingData,
+    actions.sendSignalingData,
     isOutgoing,
     Boolean(call?.isVideo),
     Boolean(call.isP2pAllowed),
@@ -512,7 +443,7 @@ addActionHandler('apiUpdate', (global, actions, update): ActionReturnType => {
       }
 
       const {
-        accessHash, state, connections, gB,
+        state, connections,
       } = call;
 
       if (state === 'active' || state === 'accepted') {
@@ -540,11 +471,10 @@ addActionHandler('apiUpdate', (global, actions, update): ActionReturnType => {
         }, getCurrentTabId());
       } else if (shouldConfirmPhoneCall(call, currentUserId)) {
         void runPhoneCallConfirm(call);
-      } else if (state === 'active' && connections?.length) {
+      } else if (state === 'active' && connections?.length && phoneCall?.state !== 'active') {
         void (async () => {
           try {
-            const callForMedia = preservePhoneCallFields(phoneCall, call);
-            await startActivePhoneCallIfNeeded(callForMedia, isOutgoing, actions);
+            await startActivePhoneCallIfNeeded(call, isOutgoing, actions);
           } catch (err) {
             logPhoneCallDebug('Failed to start phone call', {
               callId: call.id,
