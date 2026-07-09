@@ -240,11 +240,6 @@ async function startActivePhoneCallIfNeeded(
     await startActivePhoneCall(call, isOutgoing, call.connections, actions);
   } catch (err) {
     startedCallIds.delete(call.id);
-    logPhoneCallDebug('Failed to start phone call media', {
-      callId: call.id,
-      isOutgoing,
-      error: err instanceof Error ? err.message : String(err),
-    });
     throw err;
   }
 }
@@ -449,7 +444,7 @@ addActionHandler('apiUpdate', (global, actions, update): ActionReturnType => {
         }, getCurrentTabId());
       } else if (shouldConfirmPhoneCall(call, currentUserId)) {
         void runPhoneCallConfirm(call);
-      } else if (state === 'active' && connections?.length && !startedCallIds.has(call.id)) {
+      } else if (state === 'active' && connections?.length && phoneCall?.state !== 'active') {
         void (async () => {
           try {
             await startActivePhoneCallIfNeeded(call, isOutgoing, actions);

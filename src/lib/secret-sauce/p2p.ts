@@ -74,22 +74,6 @@ function extractMinimalP2pSdp(sdpString: string): P2pParsedSdp {
   };
 }
 
-function parseLocalPhoneCallSdp(conn: RTCPeerConnection): P2pParsedSdp {
-  const localDescription = conn.localDescription;
-  if (!localDescription?.sdp) {
-    throw new Error('Missing local SDP');
-  }
-
-  try {
-    return parseSdp(localDescription, true) as P2pParsedSdp;
-  } catch (err) {
-    logPhoneCallDebug('Primary SDP parse failed, using minimal extraction', {
-      error: err instanceof Error ? err.message : String(err),
-    });
-    return extractMinimalP2pSdp(localDescription.sdp);
-  }
-}
-
 function enrichParsedSdp(conn: RTCPeerConnection, sdp: P2pParsedSdp) {
   if (!sdp.ssrc) {
     const audioSender = conn.getSenders().find((sender) => sender.track?.kind === 'audio');
@@ -357,24 +341,16 @@ export async function joinPhoneCall(
     dataChannel: dc,
   };
 
-  if (isOutgoing) {
-    const offerCreated = await createOffer(conn, {
-      offerToReceiveAudio: true,
-      offerToReceiveVideo: true,
-    });
-
-    if (!offerCreated) {
-      throw new Error('Failed to create phone call offer');
-    }
+  try {
+    void toggleStreamP2p('audio', true);
+  } catch (err) {
+    console.error(err);
   }
 
-  // Enable the real microphone after the initial offer/signaling on outgoing calls.
-  // Safari/iOS is sensitive to replacing tracks before the first local SDP is built.
-  try {
-    await toggleStreamP2p('audio', true);
-  } catch (err) {
-    logPhoneCallDebug('Failed to enable microphone for phone call', {
-      error: err instanceof Error ? err.message : String(err),
+  if (isOutgoing) {
+    await createOffer(conn, {
+      offerToReceiveAudio: true,
+      offerToReceiveVideo: true,
     });
   }
 }
@@ -555,7 +531,7 @@ export async function processSignalingMessage(message: P2pMessage) {
       if (!isOutgoing) {
         const answer = await connection.createAnswer();
         await connection.setLocalDescription(answer);
-        const sdp = parseLocalPhoneCallSdp(connection);
+        const sdp = parseSdp(connection.localDescription!, true) as P2pParsedSdp;
         enrichParsedSdp(connection, sdp);
         sendInitialSetup(sdp);
       }
@@ -589,19 +565,25 @@ async function tryAddCandidate(connection: RTCPeerConnection, candidate: string)
   }
 }
 
-async function createOffer(conn: RTCPeerConnection, params: RTCOfferOptions): Promise<boolean> {
+async function createOffer(conn: RTCPeerConnection, params: RTCOfferOptions) {
   try {
     const offer = await conn.createOffer(params);
     await conn.setLocalDescription(offer);
-    const sdp = parseLocalPhoneCallSdp(conn);
+    let sdp: P2pParsedSdp;
+    try {
+      sdp = parseSdp(conn.localDescription!, true) as P2pParsedSdp;
+    } catch (parseErr) {
+      logPhoneCallDebug('Primary SDP parse failed, using minimal extraction', {
+        error: parseErr instanceof Error ? parseErr.message : String(parseErr),
+      });
+      sdp = extractMinimalP2pSdp(conn.localDescription!.sdp!);
+    }
     enrichParsedSdp(conn, sdp);
     sendInitialSetup(sdp);
     logPhoneCallDebug('Created phone call offer and sent initial setup');
-    return true;
   } catch (err) {
     logPhoneCallDebug('Failed to create offer', {
       error: err instanceof Error ? err.message : String(err),
     });
-    return false;
   }
 }
