@@ -6,7 +6,7 @@ import type {
 } from '../../types';
 
 import { requestNextMutation } from '../../../lib/fasterdom/fasterdom';
-import { ARE_CALLS_SUPPORTED } from '../../../util/browser/windowEnvironment';
+import { ARE_CALLS_SUPPORTED, IS_IOS } from '../../../util/browser/windowEnvironment';
 import { copyTextToClipboard } from '../../../util/clipboard';
 import { getCurrentTabId } from '../../../util/establishMultitabRole';
 import { omit } from '../../../util/iteratees';
@@ -374,7 +374,23 @@ addActionHandler('requestCall', (global, actions, payload): ActionReturnType => 
 
   initializeSounds();
   global = getGlobal();
-  void checkNavigatorUserMediaPermissions(global, actions, isVideo, tabId);
+
+  if (IS_IOS) {
+    // iOS requires getUserMedia inside the user-gesture handler; probing later shows a false error.
+    navigator.mediaDevices.getUserMedia({
+      audio: true,
+      ...(isVideo ? { video: true } : {}),
+    }).then((stream) => {
+      stream.getTracks().forEach((track) => track.stop());
+    }).catch(() => {
+      actions.showNotification({
+        message: langProvider.oldTranslate('RequestAcces.Error.HaveNotAccess.Call'),
+        tabId,
+      });
+    });
+  } else {
+    void checkNavigatorUserMediaPermissions(global, actions, isVideo, tabId);
+  }
 
   global = getGlobal();
   global = {
@@ -433,6 +449,21 @@ export function checkNavigatorUserMediaPermissions<T extends GlobalState>(
   actions: RequiredGlobalActions, isVideo?: boolean,
   ...[tabId = getCurrentTabId()]: TabArgs<T>
 ) {
+  if (IS_IOS) {
+    navigator.mediaDevices.getUserMedia({
+      audio: true,
+      ...(isVideo ? { video: true } : {}),
+    }).then((stream) => {
+      stream.getTracks().forEach((track) => track.stop());
+    }).catch(() => {
+      actions.showNotification({
+        message: langProvider.oldTranslate('RequestAcces.Error.HaveNotAccess.Call'),
+        tabId,
+      });
+    });
+    return;
+  }
+
   if (isVideo) {
     navigator.mediaDevices.getUserMedia({ video: true })
       .then((stream) => {

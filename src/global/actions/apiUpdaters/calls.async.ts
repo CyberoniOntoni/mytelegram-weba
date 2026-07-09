@@ -121,6 +121,21 @@ function shouldConfirmPhoneCall(call: ApiPhoneCall, currentUserId?: string) {
   );
 }
 
+function syncGlobalPhoneCall(call: ApiPhoneCall) {
+  let global = getGlobal();
+  if (!global.phoneCall) {
+    return global;
+  }
+
+  global = {
+    ...global,
+    phoneCall: preservePhoneCallFields(global.phoneCall, call),
+  };
+  setGlobal(global);
+
+  return getGlobal();
+}
+
 async function runPhoneCallConfirm(call: ApiPhoneCall) {
   if (!call.gB?.length || confirmedCallIds.has(call.id)) {
     return;
@@ -130,6 +145,8 @@ async function runPhoneCallConfirm(call: ApiPhoneCall) {
   const activeCallId = call.id;
 
   try {
+    syncGlobalPhoneCall(call);
+
     const result = await callApi('confirmPhoneCall', [call.gB, EMOJI_DATA, EMOJI_OFFSETS]);
     if (!result) {
       logPhoneCallDebug('Failed to confirm accepted phone call', { callId: activeCallId });
@@ -140,7 +157,13 @@ async function runPhoneCallConfirm(call: ApiPhoneCall) {
     const { gA, keyFingerprint, emojis } = result;
 
     let global = getGlobal();
+    if (!global.phoneCall?.id || global.phoneCall.id !== activeCallId) {
+      global = syncGlobalPhoneCall(call);
+    }
+
     if (global.phoneCall?.id !== activeCallId) {
+      confirmedCallIds.delete(call.id);
+      logPhoneCallDebug('Phone call state missing during confirm', { callId: activeCallId });
       return;
     }
 
@@ -153,11 +176,14 @@ async function runPhoneCallConfirm(call: ApiPhoneCall) {
     };
     setGlobal(global);
 
+    const confirmCallPayload = preservePhoneCallFields(global.phoneCall, call);
     const activeCall = await callApi('confirmCall', {
-      call, gA, keyFingerprint,
+      call: confirmCallPayload, gA, keyFingerprint,
     });
 
     if (activeCall && typeof activeCall === 'object' && 'state' in activeCall) {
+      syncGlobalPhoneCall(activeCall as ApiPhoneCall);
+
       const latestGlobal = getGlobal();
       const isOutgoing = normalizeUserId(activeCall.adminId) === normalizeUserId(latestGlobal.currentUserId);
       await startActivePhoneCallIfNeeded(activeCall as ApiPhoneCall, isOutgoing, getActions());
@@ -319,8 +345,13 @@ async function startActivePhoneCall(
     setGlobal(global);
   }
 
-  const global = getGlobal();
+  let global = getGlobal();
+  if (!global.phoneCall?.id || global.phoneCall.id !== activeCallId) {
+    global = syncGlobalPhoneCall(call);
+  }
+
   if (global.phoneCall?.id !== activeCallId) {
+    logPhoneCallDebug('Phone call state missing before media start', { callId: activeCallId });
     return;
   }
 
