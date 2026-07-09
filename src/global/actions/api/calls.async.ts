@@ -283,31 +283,18 @@ addActionHandler('acceptCall', async (global): Promise<void> => {
 });
 
 addActionHandler('sendSignalingData', (global, actions, payload): ActionReturnType => {
+  const { phoneCall } = global;
+  if (!phoneCall) {
+    return;
+  }
+
   const data = JSON.stringify(payload);
 
   (async () => {
-    let phoneCall = getGlobal().phoneCall;
-    if (!phoneCall?.id || !phoneCall?.accessHash) {
-      logPhoneCallDebug('Skipping signaling send, phone call not ready', {
-        hasCall: Boolean(phoneCall),
-        callId: phoneCall?.id,
-        hasAccessHash: Boolean(phoneCall?.accessHash),
-      });
-      return;
-    }
-
     const encodedData = await callApi('encodePhoneCallData', [data]);
 
     if (!encodedData) {
-      logPhoneCallDebug('Failed to encode signaling data', { callId: phoneCall.id });
-      return;
-    }
-
-    phoneCall = getGlobal().phoneCall ?? phoneCall;
-    if (!phoneCall?.id || !phoneCall?.accessHash) {
-      logPhoneCallDebug('Skipping signaling send, phone call cleared during encode', {
-        callId: phoneCall?.id,
-      });
+      logPhoneCallDebug('Failed to encode signaling data');
       return;
     }
 

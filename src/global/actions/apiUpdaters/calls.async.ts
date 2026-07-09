@@ -21,17 +21,8 @@ import { updateTabState } from '../../reducers/tabs';
 import { selectActiveGroupCall, selectGroupCallParticipant, selectPhoneCallUser } from '../../selectors/calls';
 
 const confirmedCallIds = new Set<string>();
-const startedMediaKeys = new Set<string>();
+const startedCallIds = new Set<string>();
 let phoneCallSignalingDataPromise = Promise.resolve();
-
-function getMediaStartKey(callId: string, isOutgoing: boolean) {
-  return `${callId}:${isOutgoing ? 'out' : 'in'}`;
-}
-
-function clearMediaStartKeys(callId: string) {
-  startedMediaKeys.delete(getMediaStartKey(callId, true));
-  startedMediaKeys.delete(getMediaStartKey(callId, false));
-}
 
 type PhoneCallState = NonNullable<ApiPhoneCall['state']>;
 
@@ -74,7 +65,6 @@ function preservePhoneCallFields(
     gB: call.gB ?? previousCall?.gB,
     connections: call.connections ?? previousCall?.connections,
     protocol: call.protocol ?? previousCall?.protocol,
-    accessHash: call.accessHash ?? previousCall?.accessHash,
   };
 }
 
@@ -151,30 +141,26 @@ async function runPhoneCallConfirm(call: ApiPhoneCall) {
 
     let global = getGlobal();
     if (global.phoneCall?.id !== activeCallId) {
-      confirmedCallIds.delete(call.id);
       return;
     }
 
     global = {
       ...global,
-      phoneCall: preservePhoneCallFields(global.phoneCall, {
-        ...global.phoneCall!,
+      phoneCall: {
+        ...global.phoneCall,
         emojis,
-      }),
+      } as ApiPhoneCall,
     };
     setGlobal(global);
 
     const activeCall = await callApi('confirmCall', {
-      call: preservePhoneCallFields(global.phoneCall, call),
-      gA,
-      keyFingerprint,
+      call, gA, keyFingerprint,
     });
 
     if (activeCall && typeof activeCall === 'object' && 'state' in activeCall) {
       const latestGlobal = getGlobal();
-      const isOutgoing = normalizeUserId((activeCall as ApiPhoneCall).adminId)
-        === normalizeUserId(latestGlobal.currentUserId);
-      await startActivePhoneCallIfNeeded(activeCall as ApiPhoneCall, isOutgoing, getActions());
+      const isOutgoing = normalizeUserId(activeCall.adminId) === normalizeUserId(latestGlobal.currentUserId);
+      await startActivePhoneCallIfNeeded(activeCall, isOutgoing, getActions());
     }
   } catch (err) {
     confirmedCallIds.delete(call.id);
@@ -235,28 +221,25 @@ async function startActivePhoneCallIfNeeded(
     apiUpdate: (...args: any[]) => void;
   },
 ) {
-  const mediaStartKey = getMediaStartKey(call.id, isOutgoing);
-  if (startedMediaKeys.has(mediaStartKey)) {
+  if (startedCallIds.has(call.id)) {
     return;
   }
 
   if (call.state !== 'active' || !call.connections?.length) {
     logPhoneCallDebug('Skipping phone call media start', {
       callId: call.id,
-      isOutgoing,
       state: call.state,
       connections: call.connections?.length ?? 0,
-      hasAccessHash: Boolean(call.accessHash),
     });
     return;
   }
 
-  startedMediaKeys.add(mediaStartKey);
+  startedCallIds.add(call.id);
 
   try {
     await startActivePhoneCall(call, isOutgoing, call.connections, actions);
   } catch (err) {
-    startedMediaKeys.delete(mediaStartKey);
+    startedCallIds.delete(call.id);
     throw err;
   }
 }
@@ -276,7 +259,6 @@ async function startActivePhoneCall(
     callId: activeCallId,
     isOutgoing,
     connections: connections.length,
-    hasAccessHash: Boolean(call.accessHash),
   });
 
   if (isOutgoing) {
@@ -329,27 +311,18 @@ async function startActivePhoneCall(
 
     global = {
       ...global,
-      phoneCall: preservePhoneCallFields(global.phoneCall, {
-        ...global.phoneCall!,
+      phoneCall: {
+        ...global.phoneCall,
         emojis,
-      }),
+      } as ApiPhoneCall,
     };
     setGlobal(global);
   }
 
-  let global = getGlobal();
-  const callForSignaling = preservePhoneCallFields(global.phoneCall, call);
-
-  if (!callForSignaling.accessHash) {
-    logPhoneCallDebug('Cannot start phone call media without access hash', { callId: activeCallId });
+  const global = getGlobal();
+  if (global.phoneCall?.id !== activeCallId) {
     return;
   }
-
-  global = {
-    ...global,
-    phoneCall: callForSignaling,
-  };
-  setGlobal(global);
 
   await joinPhoneCall(
     connections,
@@ -443,7 +416,7 @@ addActionHandler('apiUpdate', (global, actions, update): ActionReturnType => {
       }
 
       const {
-        state, connections,
+        accessHash, state, connections, gB,
       } = call;
 
       if (state === 'active' || state === 'accepted') {
@@ -460,7 +433,7 @@ addActionHandler('apiUpdate', (global, actions, update): ActionReturnType => {
 
       if (state === 'discarded') {
         confirmedCallIds.delete(call.id);
-        clearMediaStartKeys(call.id);
+        startedCallIds.delete(call.id);
 
         // Discarded from other device
         if (!phoneCall) return undefined;

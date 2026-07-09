@@ -15,7 +15,7 @@ import {
 import {
   buildInputGroupCall, buildInputPeer, buildInputPhoneCall, buildInputUser, DEFAULT_PRIMITIVES,
 } from '../gramjsBuilders';
-import { sendApiUpdate, sendImmediateApiUpdate } from '../updates/apiUpdateEmitter';
+import { sendApiUpdate } from '../updates/apiUpdateEmitter';
 import { invokeRequest, invokeRequestBeacon } from './client';
 
 const DH_RANDOM_LENGTH = 256;
@@ -336,7 +336,7 @@ export async function requestCall({
 
   const call = buildPhoneCall(result.phoneCall);
 
-  sendImmediateApiUpdate({
+  sendApiUpdate({
     '@type': 'updatePhoneCall',
     call,
   });
@@ -385,7 +385,7 @@ export async function acceptCall({
 
   call = buildPhoneCall(result.phoneCall);
 
-  sendImmediateApiUpdate({
+  sendApiUpdate({
     '@type': 'updatePhoneCall',
     call,
   });
@@ -411,7 +411,7 @@ export async function confirmCall({
 
   call = buildPhoneCall(result.phoneCall);
 
-  sendImmediateApiUpdate({
+  sendApiUpdate({
     '@type': 'updatePhoneCall',
     call,
   });
