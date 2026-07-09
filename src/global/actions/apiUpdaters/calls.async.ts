@@ -22,8 +22,17 @@ import { updateTabState } from '../../reducers/tabs';
 import { selectActiveGroupCall, selectGroupCallParticipant, selectPhoneCallUser } from '../../selectors/calls';
 
 const confirmedCallIds = new Set<string>();
-const startedCallIds = new Set<string>();
+const startedMediaKeys = new Set<string>();
 let phoneCallSignalingDataPromise = Promise.resolve();
+
+function getMediaStartKey(callId: string, isOutgoing: boolean) {
+  return `${callId}:${isOutgoing ? 'out' : 'in'}`;
+}
+
+function clearMediaStartKeys(callId: string) {
+  startedMediaKeys.delete(getMediaStartKey(callId, true));
+  startedMediaKeys.delete(getMediaStartKey(callId, false));
+}
 
 type PhoneCallState = NonNullable<ApiPhoneCall['state']>;
 
@@ -229,6 +238,10 @@ async function runPhoneCallConfirm(call: ApiPhoneCall) {
         keyFingerprint: (activeCall as ApiPhoneCall).keyFingerprint ?? keyFingerprint,
       });
       syncGlobalPhoneCall(callForMedia);
+
+      const latestGlobal = getGlobal();
+      const isOutgoing = normalizeUserId(callForMedia.adminId) === normalizeUserId(latestGlobal.currentUserId);
+      await startActivePhoneCallIfNeeded(callForMedia, isOutgoing, getActions());
     }
   } catch (err) {
     confirmedCallIds.delete(call.id);
@@ -289,25 +302,27 @@ async function startActivePhoneCallIfNeeded(
     apiUpdate: (...args: any[]) => void;
   },
 ) {
-  if (startedCallIds.has(call.id)) {
+  const mediaStartKey = getMediaStartKey(call.id, isOutgoing);
+  if (startedMediaKeys.has(mediaStartKey)) {
     return;
   }
 
   if (call.state !== 'active' || !call.connections?.length) {
     logPhoneCallDebug('Skipping phone call media start', {
       callId: call.id,
+      isOutgoing,
       state: call.state,
       connections: call.connections?.length ?? 0,
     });
     return;
   }
 
-  startedCallIds.add(call.id);
+  startedMediaKeys.add(mediaStartKey);
 
   try {
-    await startActivePhoneCall(call, isOutgoing, call.connections, actions);
+    await startActivePhoneCall(call, isOutgoing, call.connections, actions, mediaStartKey);
   } catch (err) {
-    startedCallIds.delete(call.id);
+    startedMediaKeys.delete(mediaStartKey);
     throw err;
   }
 }
@@ -320,6 +335,7 @@ async function startActivePhoneCall(
     sendSignalingData: (...args: any[]) => void;
     apiUpdate: (...args: any[]) => void;
   },
+  mediaStartKey: string,
 ) {
   const activeCallId = call.id;
 
@@ -340,7 +356,7 @@ async function startActivePhoneCall(
 
     let global = getGlobal();
     if (global.phoneCall?.id !== activeCallId) {
-      startedCallIds.delete(activeCallId);
+      startedMediaKeys.delete(mediaStartKey);
       return;
     }
 
@@ -368,7 +384,7 @@ async function startActivePhoneCall(
 
     if (!result) {
       logPhoneCallDebug('Failed to confirm phone call', { callId: activeCallId });
-      startedCallIds.delete(activeCallId);
+      startedMediaKeys.delete(mediaStartKey);
       return;
     }
 
@@ -376,7 +392,7 @@ async function startActivePhoneCall(
 
     global = getGlobal();
     if (global.phoneCall?.id !== activeCallId) {
-      startedCallIds.delete(activeCallId);
+      startedMediaKeys.delete(mediaStartKey);
       return;
     }
 
@@ -397,7 +413,7 @@ async function startActivePhoneCall(
 
   if (global.phoneCall?.id !== activeCallId) {
     logPhoneCallDebug('Phone call state missing before media start', { callId: activeCallId });
-    startedCallIds.delete(activeCallId);
+    startedMediaKeys.delete(mediaStartKey);
     return;
   }
 
@@ -513,7 +529,7 @@ addActionHandler('apiUpdate', (global, actions, update): ActionReturnType => {
 
       if (state === 'discarded') {
         confirmedCallIds.delete(call.id);
-        startedCallIds.delete(call.id);
+        clearMediaStartKeys(call.id);
 
         // Discarded from other device
         if (!phoneCall) return undefined;
@@ -524,7 +540,7 @@ addActionHandler('apiUpdate', (global, actions, update): ActionReturnType => {
         }, getCurrentTabId());
       } else if (shouldConfirmPhoneCall(call, currentUserId)) {
         void runPhoneCallConfirm(call);
-      } else if (state === 'active' && connections?.length && !startedCallIds.has(call.id)) {
+      } else if (state === 'active' && connections?.length) {
         void (async () => {
           try {
             const callForMedia = preservePhoneCallFields(phoneCall, call);
