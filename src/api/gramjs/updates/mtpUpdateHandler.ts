@@ -93,7 +93,7 @@ import {
 } from '../helpers/misc';
 import localDb from '../localDb';
 import { scheduleMutedChatUpdate, scheduleMutedTopicUpdate } from '../scheduleUnmute';
-import { sendApiUpdate } from './apiUpdateEmitter';
+import { sendApiUpdate, sendImmediateApiUpdate } from './apiUpdateEmitter';
 import { processMessageAndUpdateThreadInfo } from './entityProcessor';
 
 import LocalUpdatePremiumFloodWait from './UpdatePremiumFloodWait';
@@ -987,12 +987,12 @@ export function updater(update: Update) {
       requestsPending: update.requestsPending,
     });
   } else if (update instanceof GramJs.UpdatePhoneCall) {
-    sendApiUpdate({
+    sendImmediateApiUpdate({
       '@type': 'updatePhoneCall',
       call: buildPhoneCall(update.phoneCall),
     });
   } else if (update instanceof GramJs.UpdatePhoneCallSignalingData) {
-    sendApiUpdate({
+    sendImmediateApiUpdate({
       '@type': 'updatePhoneCallSignalingData',
       callId: update.phoneCallId.toString(),
       data: Array.from(update.data),

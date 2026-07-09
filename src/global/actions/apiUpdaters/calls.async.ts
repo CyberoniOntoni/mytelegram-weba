@@ -1,5 +1,6 @@
 import type { ApiPhoneCall } from '../../../api/types';
 import type { ApiCallProtocol } from '../../../lib/secret-sauce';
+import type { P2pMessage } from '../../../lib/secret-sauce/p2pMessage';
 import type { ActionReturnType } from '../../types';
 
 import { CALL_PROTOCOL_LIBRARY_VERSIONS } from '../../../config';
@@ -121,6 +122,47 @@ function shouldConfirmPhoneCall(call: ApiPhoneCall, currentUserId?: string) {
   );
 }
 
+function createSignalingDataEmitter(call: ApiPhoneCall) {
+  return (payload: P2pMessage) => {
+    if (!call.id || !call.accessHash) {
+      logPhoneCallDebug('Skipping signaling send, call snapshot incomplete', {
+        callId: call.id,
+        hasAccessHash: Boolean(call.accessHash),
+      });
+      return;
+    }
+
+    const data = JSON.stringify(payload);
+
+    void (async () => {
+      try {
+        const encodedData = await callApi('encodePhoneCallData', [data]);
+        if (!encodedData) {
+          logPhoneCallDebug('Failed to encode signaling data', { callId: call.id });
+          return;
+        }
+
+        const sent = await callApi('sendSignalingData', { data: encodedData, call });
+        if (!sent) {
+          logPhoneCallDebug('Failed to send signaling data to server', { callId: call.id });
+        } else {
+          logPhoneCallDebug('Sent signaling data to server', {
+            callId: call.id,
+            bytes: encodedData.length,
+            type: payload['@type'],
+          });
+        }
+      } catch (err) {
+        logPhoneCallDebug('Failed to send signaling data', {
+          callId: call.id,
+          type: payload['@type'],
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    })();
+  };
+}
+
 function syncGlobalPhoneCall(call: ApiPhoneCall) {
   let global = getGlobal();
   if (!global.phoneCall) {
@@ -187,10 +229,6 @@ async function runPhoneCallConfirm(call: ApiPhoneCall) {
         keyFingerprint: (activeCall as ApiPhoneCall).keyFingerprint ?? keyFingerprint,
       });
       syncGlobalPhoneCall(callForMedia);
-
-      const latestGlobal = getGlobal();
-      const isOutgoing = normalizeUserId(callForMedia.adminId) === normalizeUserId(latestGlobal.currentUserId);
-      await startActivePhoneCallIfNeeded(callForMedia, isOutgoing, getActions());
     }
   } catch (err) {
     confirmedCallIds.delete(call.id);
@@ -363,9 +401,12 @@ async function startActivePhoneCall(
     return;
   }
 
+  const signalingCall = preservePhoneCallFields(global.phoneCall, call);
+  const emitSignalingData = createSignalingDataEmitter(signalingCall);
+
   await joinPhoneCall(
     connections,
-    actions.sendSignalingData,
+    emitSignalingData,
     isOutgoing,
     Boolean(call?.isVideo),
     Boolean(call.isP2pAllowed),
@@ -483,7 +524,7 @@ addActionHandler('apiUpdate', (global, actions, update): ActionReturnType => {
         }, getCurrentTabId());
       } else if (shouldConfirmPhoneCall(call, currentUserId)) {
         void runPhoneCallConfirm(call);
-      } else if (state === 'active' && connections?.length && phoneCall?.state !== 'active') {
+      } else if (state === 'active' && connections?.length && !startedCallIds.has(call.id)) {
         void (async () => {
           try {
             const callForMedia = preservePhoneCallFields(phoneCall, call);

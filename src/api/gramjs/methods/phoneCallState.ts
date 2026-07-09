@@ -140,6 +140,9 @@ class PhoneCallState {
   }
 
   async encode(data: string) {
+    if (!this.state) {
+      await this.waitForState;
+    }
     if (!this.state) return undefined;
 
     const seqArray = new Uint32Array(1);
