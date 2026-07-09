@@ -12,6 +12,7 @@ import {
 import buildSdp, { Conference } from './buildSdp';
 import { logPhoneCallDebug } from './phoneCallDebug';
 import { StreamType } from './secretsauce';
+import { IS_SAFARI } from '../../util/browser/windowEnvironment';
 
 type P2pState = {
   connection: RTCPeerConnection;
@@ -72,6 +73,27 @@ function extractMinimalP2pSdp(sdpString: string): P2pParsedSdp {
     videoPayloadTypes: [],
     screencastPayloadTypes: [],
   };
+}
+
+function parseLocalPhoneCallSdp(conn: RTCPeerConnection): P2pParsedSdp {
+  const localDescription = conn.localDescription;
+  if (!localDescription?.sdp) {
+    throw new Error('Missing local SDP');
+  }
+
+  // Safari/iOS must keep full SDP payload types; Chrome may need minimal ICE-only fallback.
+  if (IS_SAFARI) {
+    return parseSdp(localDescription, true) as P2pParsedSdp;
+  }
+
+  try {
+    return parseSdp(localDescription, true) as P2pParsedSdp;
+  } catch (parseErr) {
+    logPhoneCallDebug('Primary SDP parse failed, using minimal extraction', {
+      error: parseErr instanceof Error ? parseErr.message : String(parseErr),
+    });
+    return extractMinimalP2pSdp(localDescription.sdp);
+  }
 }
 
 function enrichParsedSdp(conn: RTCPeerConnection, sdp: P2pParsedSdp) {
@@ -531,7 +553,7 @@ export async function processSignalingMessage(message: P2pMessage) {
       if (!isOutgoing) {
         const answer = await connection.createAnswer();
         await connection.setLocalDescription(answer);
-        const sdp = parseSdp(connection.localDescription!, true) as P2pParsedSdp;
+        const sdp = parseLocalPhoneCallSdp(connection);
         enrichParsedSdp(connection, sdp);
         sendInitialSetup(sdp);
       }
@@ -569,15 +591,7 @@ async function createOffer(conn: RTCPeerConnection, params: RTCOfferOptions) {
   try {
     const offer = await conn.createOffer(params);
     await conn.setLocalDescription(offer);
-    let sdp: P2pParsedSdp;
-    try {
-      sdp = parseSdp(conn.localDescription!, true) as P2pParsedSdp;
-    } catch (parseErr) {
-      logPhoneCallDebug('Primary SDP parse failed, using minimal extraction', {
-        error: parseErr instanceof Error ? parseErr.message : String(parseErr),
-      });
-      sdp = extractMinimalP2pSdp(conn.localDescription!.sdp!);
-    }
+    const sdp = parseLocalPhoneCallSdp(conn);
     enrichParsedSdp(conn, sdp);
     sendInitialSetup(sdp);
     logPhoneCallDebug('Created phone call offer and sent initial setup');
